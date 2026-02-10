@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Go SDK for the Things 3 cloud API (Cultured Code). This is a reverse-engineered, unofficial SDK — there is no official API documentation. The client spoofs User-Agent as `ThingsMac/31516502` (Things Mac 3.15).
+Go SDK for the Things 3 cloud API (Cultured Code). This is a reverse-engineered, unofficial SDK — there is no official API documentation. The client mimics `ThingsMac/32209501` and sends a base64-encoded `things-client-info` device metadata header.
 
 ## Build & Test Commands
 
@@ -24,17 +24,19 @@ All source code lives at the package root (`package things`), with one sub-packa
 
 The SDK models all changes as immutable **Items** (events). A **History** is a sync stream identified by a UUID. The client pushes/pulls Items through Histories to stay in sync with the Things Cloud server.
 
-- **`client.go`** — HTTP client with auth (`Authorization: Password <pw>`), base endpoint `https://cloud.culturedcode.com`
+- **`client.go`** — HTTP client with `ClientInfo` header and configurable `Debug` logging, base endpoint `https://cloud.culturedcode.com`
 - **`histories.go`** — History CRUD and sync operations (list, create, delete, read/write items with ancestor indices)
-- **`items.go`** — Item construction: every mutation (create/modify/delete) on a Task, Area, Tag, or CheckListItem produces an Item
-- **`types.go`** — Domain types: `Task`, `Area`, `Tag`, `CheckListItem`, plus custom JSON-compatible types (`Timestamp` as unix epoch, `Boolean` as int)
-- **`repeat.go`** — Complex recurring task date calculation (daily/weekly/monthly/yearly, with end conditions)
-- **`helpers.go`** — Pointer helpers (`String()`, `Status()`, `Schedule()`, `Time()`) for building payloads
+- **`items.go`** — Item construction: every mutation (create/modify/delete) on a Task, Area, Tag, CheckListItem, or Tombstone produces an Item
+- **`types.go`** — Domain types: `Task` (with `TaskType` enum: Task/Project/Heading), `Area`, `Tag`, `CheckListItem`, `Tombstone`, plus custom JSON types (`Timestamp`, `Boolean`)
+- **`notes.go`** — Structured `Note` type with full-text and delta patch support (`ApplyPatches`)
+- **`repeat.go`** — Recurring task date calculation (daily/weekly/monthly/yearly, with end conditions)
+- **`helpers.go`** — Pointer helpers (`String()`, `Status()`, `Schedule()`, `Time()`, `TaskTypePtr()`)
 - **`account.go`** — AccountService for signup, confirmation, password change, deletion
+- **`app_instance.go`** — Device registration for APNS push notifications
 
 ### State Aggregation
 
-`state/memory` provides an in-memory store that aggregates Items into a queryable hierarchy: Areas → Tasks → Subtasks → CheckListItems. It is **not thread-safe**.
+`state/memory` provides an in-memory store that aggregates Items into a queryable hierarchy: Areas → Tasks → Subtasks → CheckListItems. Key queries: `Projects()`, `Headings()`, `TasksByHeading()`, `TasksByArea()`, `Subtasks()`, `CheckListItemsByTask()`. It is **not thread-safe**.
 
 ### Test Infrastructure
 
