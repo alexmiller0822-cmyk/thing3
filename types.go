@@ -48,15 +48,24 @@ type ItemKind string
 
 var (
 	// ItemKindChecklistItem identifies a CheckList
-	ItemKindChecklistItem ItemKind = "ChecklistItem"
+	ItemKindChecklistItem  ItemKind = "ChecklistItem"
+	ItemKindChecklistItem2 ItemKind = "ChecklistItem2"
+	ItemKindChecklistItem3 ItemKind = "ChecklistItem3"
 	// ItemKindTask identifies a Task or Subtask
-	ItemKindTask ItemKind = "Task6"
+	ItemKindTask      ItemKind = "Task6"
+	ItemKindTask4     ItemKind = "Task4"
+	ItemKindTask3     ItemKind = "Task3"
+	ItemKindTaskPlain ItemKind = "Task"
 	// ItemKindArea identifies an Area
-	ItemKindArea ItemKind = "Area2"
+	ItemKindArea      ItemKind = "Area2"
+	ItemKindArea3     ItemKind = "Area3"
+	ItemKindAreaPlain ItemKind = "Area"
 	// ItemKindSettings  identifies a setting
 	ItemKindSettings ItemKind = "Settings3"
 	// ItemKindTag identifies a Tag
-	ItemKindTag ItemKind = "Tag3"
+	ItemKindTag      ItemKind = "Tag3"
+	ItemKindTag4     ItemKind = "Tag4"
+	ItemKindTagPlain ItemKind = "Tag"
 )
 
 // Timestamp allows unix epochs represented as float or ints to be unmarshalled
@@ -180,7 +189,7 @@ type TaskActionItemPayload struct {
 	Status            *TaskStatus            `json:"ss,omitempty"`
 	IsProject         *Boolean               `json:"tp,omitempty"`
 	Title             *string                `json:"tt,omitempty"`
-	Note              *string                `json:"nt,omitempty"`
+	Note              json.RawMessage        `json:"nt,omitempty"`
 	AreaIDs           *[]string              `json:"ar,omitempty"`
 	ParentTaskIDs     *[]string              `json:"pr,omitempty"`
 	TagIDs            []string               `json:"tg,omitempty"`

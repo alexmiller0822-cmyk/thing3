@@ -85,7 +85,18 @@ func (s *State) updateTask(item things.TaskActionItem) *things.Task {
 		t.ParentTaskIDs = ids
 	}
 	if item.P.Note != nil {
-		t.Note = *item.P.Note
+		// Note can be a string or an object like {"_t":"tx","v":"note text"}
+		var noteStr string
+		if err := json.Unmarshal(item.P.Note, &noteStr); err == nil {
+			t.Note = noteStr
+		} else {
+			var noteObj map[string]interface{}
+			if err := json.Unmarshal(item.P.Note, &noteObj); err == nil {
+				if v, ok := noteObj["v"].(string); ok {
+					t.Note = v
+				}
+			}
+		}
 	}
 	if item.P.Title != nil {
 		t.Title = *item.P.Title
@@ -164,7 +175,7 @@ func (s *State) updateTag(item things.TagActionItem) *things.Tag {
 func (s *State) Update(items ...things.Item) error {
 	for _, rawItem := range items {
 		switch rawItem.Kind {
-		case things.ItemKindTask:
+		case things.ItemKindTask, things.ItemKindTask4, things.ItemKindTask3, things.ItemKindTaskPlain:
 			item := things.TaskActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
 				return err
@@ -181,7 +192,7 @@ func (s *State) Update(items ...things.Item) error {
 				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
 			}
 
-		case things.ItemKindChecklistItem:
+		case things.ItemKindChecklistItem, things.ItemKindChecklistItem2, things.ItemKindChecklistItem3:
 			item := things.CheckListActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
 				return err
@@ -198,7 +209,7 @@ func (s *State) Update(items ...things.Item) error {
 				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
 			}
 
-		case things.ItemKindArea:
+		case things.ItemKindArea, things.ItemKindArea3, things.ItemKindAreaPlain:
 			item := things.AreaActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
 				return err
@@ -216,7 +227,7 @@ func (s *State) Update(items ...things.Item) error {
 				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
 			}
 
-		case things.ItemKindTag:
+		case things.ItemKindTag, things.ItemKindTag4, things.ItemKindTagPlain:
 			item := things.TagActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
 				return err
