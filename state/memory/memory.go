@@ -433,6 +433,52 @@ func (s *State) CheckListItemsByTask(task *things.Task, opts ListOption) []*thin
 	return items
 }
 
+// Headings returns all headings within a project
+func (s *State) Headings(projectID string) []*things.Task {
+	tasks := []*things.Task{}
+	for _, task := range s.Tasks {
+		if task.Type != things.TaskTypeHeading {
+			continue
+		}
+		for _, pid := range task.ParentTaskIDs {
+			if pid == projectID {
+				tasks = append(tasks, task)
+				break
+			}
+		}
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].Index < tasks[j].Index
+	})
+	return tasks
+}
+
+// TasksByHeading returns tasks assigned to a specific heading (action group)
+func (s *State) TasksByHeading(headingID string, opts ListOption) []*things.Task {
+	tasks := []*things.Task{}
+	for _, task := range s.Tasks {
+		if task.Type != things.TaskTypeTask {
+			continue
+		}
+		if task.Status == things.TaskStatusCompleted && opts.ExcludeCompleted {
+			continue
+		}
+		if task.InTrash && opts.ExcludeInTrash {
+			continue
+		}
+		for _, agr := range task.ActionGroupIDs {
+			if agr == headingID {
+				tasks = append(tasks, task)
+				break
+			}
+		}
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].Index < tasks[j].Index
+	})
+	return tasks
+}
+
 // SubTags returns all child tags for a given root, ensuring sort order is kept intact
 func (s *State) SubTags(root *things.Tag) []*things.Tag {
 	children := []*things.Tag{}

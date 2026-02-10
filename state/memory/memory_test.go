@@ -404,3 +404,53 @@ func TestState_updateTag(t *testing.T) {
 		})
 	})
 }
+
+func TestState_Headings(t *testing.T) {
+	t.Parallel()
+	s := NewState()
+
+	projType := things.TaskTypeProject
+	headType := things.TaskTypeHeading
+	taskType := things.TaskTypeTask
+
+	// Create a project
+	projPayload, _ := json.Marshal(things.TaskActionItemPayload{
+		Title: stringVal("My Project"),
+		Type:  &projType,
+	})
+	// Create a heading under the project
+	headPayload, _ := json.Marshal(things.TaskActionItemPayload{
+		Title:         stringVal("Phase 1"),
+		Type:          &headType,
+		ParentTaskIDs: &[]string{"proj-1"},
+	})
+	// Create a task under the heading
+	taskPayload, _ := json.Marshal(things.TaskActionItemPayload{
+		Title:          stringVal("Do something"),
+		Type:           &taskType,
+		ActionGroupIDs: &[]string{"head-1"},
+		ParentTaskIDs:  &[]string{"proj-1"},
+	})
+
+	s.Update(
+		things.Item{UUID: "proj-1", Kind: things.ItemKindTask, Action: things.ItemActionCreated, P: projPayload},
+		things.Item{UUID: "head-1", Kind: things.ItemKindTask, Action: things.ItemActionCreated, P: headPayload},
+		things.Item{UUID: "task-1", Kind: things.ItemKindTask, Action: things.ItemActionCreated, P: taskPayload},
+	)
+
+	headings := s.Headings("proj-1")
+	if len(headings) != 1 {
+		t.Fatalf("expected 1 heading, got %d", len(headings))
+	}
+	if headings[0].Title != "Phase 1" {
+		t.Errorf("expected 'Phase 1', got '%s'", headings[0].Title)
+	}
+
+	tasks := s.TasksByHeading("head-1", ListOption{})
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task under heading, got %d", len(tasks))
+	}
+	if tasks[0].Title != "Do something" {
+		t.Errorf("expected 'Do something', got '%s'", tasks[0].Title)
+	}
+}
