@@ -85,15 +85,17 @@ func (s *State) updateTask(item things.TaskActionItem) *things.Task {
 		t.ParentTaskIDs = ids
 	}
 	if item.P.Note != nil {
-		// Note can be a string or an object like {"_t":"tx","v":"note text"}
 		var noteStr string
 		if err := json.Unmarshal(item.P.Note, &noteStr); err == nil {
 			t.Note = noteStr
 		} else {
-			var noteObj map[string]interface{}
-			if err := json.Unmarshal(item.P.Note, &noteObj); err == nil {
-				if v, ok := noteObj["v"].(string); ok {
-					t.Note = v
+			var note things.Note
+			if err := json.Unmarshal(item.P.Note, &note); err == nil {
+				switch note.Type {
+				case things.NoteTypeFullText:
+					t.Note = note.Value
+				case things.NoteTypeDelta:
+					t.Note = things.ApplyPatches(t.Note, note.Patches)
 				}
 			}
 		}
