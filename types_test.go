@@ -132,6 +132,32 @@ func TestTaskActionItemPayload_AllFields(t *testing.T) {
 	}
 }
 
+func TestCheckListActionItemPayload_ExtensionData(t *testing.T) {
+	raw := `{"tt":"item","ix":0,"cd":1770713708.70,"md":1770713711.01,
+		"ss":0,"sp":null,"lt":false,"ts":["abc"],"xx":{"sn":{},"_t":"oo"}}`
+	var p CheckListActionItemPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if p.Leavable == nil || *p.Leavable != false {
+		t.Error("expected Leavable=false")
+	}
+	if p.ExtensionData == nil {
+		t.Error("expected ExtensionData to be set")
+	}
+}
+
+func TestTagActionItemPayload_ExtensionData(t *testing.T) {
+	raw := `{"tt":"tag","ix":0,"pn":[],"sh":null,"xx":{"sn":{},"_t":"oo"}}`
+	var p TagActionItemPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if p.ExtensionData == nil {
+		t.Error("expected ExtensionData to be set")
+	}
+}
+
 func TestTimestamp_MarshalJSON(t *testing.T) {
 	testCases := []struct {
 		Time     time.Time

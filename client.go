@@ -85,7 +85,7 @@ func New(endpoint, email, password string) *Client {
 	return c
 }
 
-// ThingsUserAgent is the http user-agent header set by things for mac Version 3.13.8 (31308504)
+// ThingsUserAgent is the http user-agent header set by things for mac
 const ThingsUserAgent = "ThingsMac/32209501"
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
