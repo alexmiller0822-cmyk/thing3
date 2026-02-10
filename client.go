@@ -3,7 +3,9 @@ package thingscloud
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 )
 
@@ -68,14 +70,14 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Content-Encoding", "UTF8")
 	req.Header.Set("Accept-Language", "en-us")
 
-	// bs, _ := httputil.DumpRequest(req, true)
-	// log.Println(string(bs))
+	bs, _ := httputil.DumpRequest(req, true)
+	log.Println("REQUEST:", string(bs))
 
 	resp, err := c.client.Do(req)
-	// if err == nil {
-	// 	bs, _ := httputil.DumpResponse(resp, true)
-	// 	log.Println(string(bs))
-	// }
-	// log.Println()
+	if err == nil {
+		bs, _ := httputil.DumpResponse(resp, true)
+		log.Println("RESPONSE:", string(bs))
+	}
+	log.Println()
 	return resp, err
 }
