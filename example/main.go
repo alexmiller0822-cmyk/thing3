@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"time"
 
@@ -10,6 +11,24 @@ import (
 	thingscloud "github.com/nicolai86/things-cloud-sdk"
 	memory "github.com/nicolai86/things-cloud-sdk/state/memory"
 )
+
+// base58Encode encodes a UUID as a Base58 string using the Bitcoin alphabet.
+// Things.app requires Base58-encoded UUIDs — standard UUID strings will crash the client.
+func base58Encode(u uuid.UUID) string {
+	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	n := new(big.Int).SetBytes(u[:])
+	base := big.NewInt(58)
+	mod := new(big.Int)
+	var encoded []byte
+	for n.Sign() > 0 {
+		n.DivMod(n, base, mod)
+		encoded = append(encoded, alphabet[mod.Int64()])
+	}
+	for i, j := 0, len(encoded)-1; i < j; i, j = i+1, j-1 {
+		encoded[i], encoded[j] = encoded[j], encoded[i]
+	}
+	return string(encoded)
+}
 
 func printTag(tag *thingscloud.Tag, state *memory.State, indent string) {
 	fmt.Printf("%s-\t%s\n", indent, tag.Title)
@@ -95,7 +114,7 @@ func main() {
 
 	pending := thingscloud.TaskStatusPending
 	anytime := thingscloud.TaskScheduleAnytime
-	taskUUID := uuid.New().String()
+	taskUUID := base58Encode(uuid.New())
 	now := thingscloud.Timestamp(time.Now())
 	date := thingscloud.Timestamp(time.Now().Truncate(24 * time.Hour))
 	todayIdx := 0
@@ -108,19 +127,18 @@ func main() {
 			UUID:   taskUUID,
 		},
 		P: thingscloud.TaskActionItemPayload{
-			Title:            stringVal("test project"),
-			Schedule:         &anytime,
-			Status:           &pending,
-			CreationDate:     &now,
-			ModificationDate: &now,
-			ScheduledDate:    &date,
-			TaskIR:           &date,
-			Index:            &idx,
-			TaskIndex:        &todayIdx,
-			Type:             thingscloud.TaskTypePtr(thingscloud.TaskTypeTask),
+			Title:         stringVal("test project"),
+			Schedule:      &anytime,
+			Status:        &pending,
+			CreationDate:  &now,
+			ScheduledDate: &date,
+			TaskIR:        &date,
+			Index:         &idx,
+			TaskIndex:     &todayIdx,
+			Type:          thingscloud.TaskTypePtr(thingscloud.TaskTypeTask),
 		},
 	}); err != nil {
-		log.Fatalf("Task creation failed failed: %q\n", err.Error())
+		log.Fatalf("Task creation failed: %q\n", err.Error())
 	}
 
 	log.Printf("Deleting task %s\n", taskUUID)
@@ -132,7 +150,7 @@ func main() {
 		},
 		P: thingscloud.TaskActionItemPayload{},
 	}); err != nil {
-		log.Fatalf("Task deletion failed failed: %q\n", err.Error())
+		log.Fatalf("Task deletion failed: %q\n", err.Error())
 	}
 
 	items, _, err := history.Items(thingscloud.ItemsOptions{StartIndex: 0})
@@ -193,7 +211,6 @@ Tags:           %d
 	currentTime := time.Now()
 	todayStart := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, time.UTC)
 	for _, task := range state.Tasks {
-		// Today = started (Anytime) with sr/tir set to today's date
 		if task.Schedule != thingscloud.TaskScheduleAnytime {
 			continue
 		}

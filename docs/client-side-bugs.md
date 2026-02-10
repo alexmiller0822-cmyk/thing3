@@ -149,14 +149,77 @@ All bugs were identified by:
 3. Comparing field values (especially `st`, `sr`, `tir`) between the HAR capture and `things-cli` debug output
 4. Cross-referencing against the Things SQLite schema comments in `types.go`
 
+## Bug 5: Things.app Crashes on Cloud-Synced Tasks — RESOLVED
+
+### Root Cause: UUIDs Were Not Base58-Encoded
+
+The crash was **not** caused by notes, `md` timestamps, field ordering, or the two-commit pattern. **The root cause was invalid UUID encoding.**
+
+Things.app's `BSSyncValueEncoder.decode()` in `Base.framework` calls `BSIdentifierFromBase58String()` to parse each UUID key from sync data. The SDK was generating UUIDs using a fake Base62 mapping (modulo of raw bytes against an alphanumeric alphabet), which produced strings that **looked** plausible but were **not valid Base58**.
+
+When Things.app tried to decode these UUIDs:
+1. `BSIdentifierFromBase58String()` returned an invalid result
+2. The decode loop's array bounds check failed
+3. `EXC_BREAKPOINT` (Swift `brk #1`) at Base.framework offset `0xA6194`
+
+### How We Found It
+
+1. **Crash report analysis** (`~/Library/Logs/DiagnosticReports/Things3-2026-02-10-124613.ips`) — the crash was in `Base.BSSyncValueEncoder.decode()`, NOT `insertTaskWithUUID:usingTombstones:` as initially assumed
+2. **Hopper disassembly** of `Base.framework` — traced the crash to the `BSIdentifierFromBase58String()` call and its bounds-check trap
+3. **Register state** at crash — `x23 = 0xFFFFFFFF` (error sentinel from failed Base58 decode), `x22` non-zero (ruling out the nil-operation path)
+4. **HAR capture comparison** — real Things UUIDs are 21-22 character Base58 strings (e.g., `Q9sihFX2SsvGaz6vv4J2Hf`), not standard UUID format
+
+### The Fix
+
+Replace the broken UUID generation:
+
+```go
+// BEFORE (broken — fake Base62, not valid Base58):
+chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+result := make([]byte, 22)
+for i := 0; i < 22; i++ {
+    result[i] = chars[int(bytes[i%16])%len(chars)]
+}
+
+// AFTER (correct — proper Base58 encoding with Bitcoin alphabet):
+const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+n := new(big.Int).SetBytes(uuid[:])
+base := big.NewInt(58)
+for n.Sign() > 0 {
+    n.DivMod(n, base, mod)
+    encoded = append(encoded, alphabet[mod.Int64()])
+}
+// reverse for big-endian
+```
+
+Key differences:
+- Base58 alphabet excludes `0`, `O`, `I`, `l` (avoids visual ambiguity)
+- Proper base conversion via `math/big` division, not modulo mapping
+- Produces 21-22 character strings matching Things' native format
+
+### Verification
+
+Tested on account **things33** (2026-02-10):
+- Task creation (no note) — syncs and displays correctly
+- Task creation with note (single commit) — syncs and displays correctly
+- Task editing, completion, trashing — all work
+- Project with headings and subtasks — all work
+- Tag and area creation — all work
+
+The "note bug" was a red herring. Notes in single-commit creates work fine — every test that "failed on notes" actually failed because the UUID was invalid.
+
+### Why Corrupted Accounts Cascade-Failed
+
+Once an item with an invalid UUID is written to the cloud history, **every subsequent sync attempt crashes**. The server stores UUID keys as opaque strings, so it accepts anything. But the client must decode every UUID in the history during sync. One bad UUID poisons the entire history, which is why things9-23 all became permanently unusable.
+
 ## Files Changed
 
 | File | Changes |
 |------|---------|
-| `cmd/things-cli/main.go` | Fixed `st` values in create/edit, fixed today filter |
+| `cmd/things-cli/main.go` | Fixed `st` values, fixed `generateUUID()` to use Base58, added `create-area` command |
+| `example/main.go` | Base58 UUID encoding, removed `ModificationDate` from creates |
 | `types.go` | Renamed `TaskScheduleToday` → `TaskScheduleInbox`, fixed `Timestamp` marshal/unmarshal |
 | `types_test.go` | Updated marshal test for fractional output |
-| `example/main.go` | Updated Today filter to use schedule+date logic |
 | `itemaction_string.go` | Updated stringer for renamed constant |
 | `state/memory/memory.go` | Nil guard in `hasArea()` |
 | `notes.go` | Bounds clamping in `ApplyPatches()` |

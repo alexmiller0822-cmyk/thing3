@@ -128,31 +128,6 @@ func textNote(s string) WireNote {
 	return WireNote{TypeTag: "tx", Checksum: noteChecksum(s), Value: s, Type: 1}
 }
 
-// WireNotePatch represents a note in patch/delta format (type 2), as used by iOS.
-// This is the format Things expects for note updates.
-type WireNotePatch struct {
-	Type    int             `json:"t"`
-	Patches []NotePatchItem `json:"ps"`
-	TypeTag string          `json:"_t"`
-}
-
-type NotePatchItem struct {
-	Replacement string `json:"r"`
-	Position    int    `json:"p"`
-	Length      int    `json:"l"`
-	Checksum    int64  `json:"ch"`
-}
-
-func patchNote(s string) WireNotePatch {
-	return WireNotePatch{
-		Type: 2,
-		Patches: []NotePatchItem{
-			{Replacement: s, Position: 0, Length: 0, Checksum: noteChecksum(s)},
-		},
-		TypeTag: "tx",
-	}
-}
-
 func defaultExtension() WireExtension {
 	return WireExtension{Sn: map[string]any{}, TypeTag: "oo"}
 }
@@ -242,48 +217,6 @@ func outputJSON(v any) {
 // ---------------------------------------------------------------------------
 // Payload builders
 // ---------------------------------------------------------------------------
-
-// newBlankTaskSkeleton creates a completely empty task skeleton matching iOS's
-// create format. All real data is added via a subsequent UPDATE commit.
-func newBlankTaskSkeleton() TaskCreatePayload {
-	now := nowTs()
-	return TaskCreatePayload{
-		Tp:   0,
-		Sr:   nil,
-		Dds:  nil,
-		Rt:   []string{},
-		Rmd:  nil,
-		Ss:   0,
-		Tr:   false,
-		Dl:   []string{},
-		Icp:  false,
-		St:   0,
-		Ar:   []string{},
-		Tt:   "",   // empty title — set via update
-		Do:   0,
-		Lai:  nil,
-		Tir:  nil,
-		Tg:   []string{},
-		Agr:  []string{},
-		Ix:   0,
-		Cd:   now,
-		Lt:   false,
-		Icc:  0,
-		Md:   nil, // null on create, set via update
-		Ti:   0,
-		Dd:   nil,
-		Ato:  nil,
-		Nt:   emptyNote(),
-		Icsd: nil,
-		Pr:   []string{},
-		Rp:   nil,
-		Acrd: nil,
-		Sp:   nil,
-		Sb:   0,
-		Rr:   nil,
-		Xx:   defaultExtension(),
-	}
-}
 
 func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayload {
 	now := nowTs()
@@ -433,11 +366,6 @@ func (u *taskUpdate) Title(s string) *taskUpdate {
 
 func (u *taskUpdate) Note(text string) *taskUpdate {
 	u.fields["nt"] = textNote(text)
-	return u
-}
-
-func (u *taskUpdate) NotePatch(text string) *taskUpdate {
-	u.fields["nt"] = patchNote(text)
 	return u
 }
 
@@ -713,27 +641,10 @@ func cmdCreate(history *thingscloud.History, args []string) {
 		taskUUID = generateUUID()
 	}
 
-	// Extract note — handled separately via two-commit pattern if present.
-	noteText := opts["note"]
-	delete(opts, "note")
-
-	// Single-commit create with all data (no note).
-	// Matches iOS's format for no-note tasks.
 	payload := newTaskCreatePayload(title, opts)
 	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
 	if err := history.Write(env); err != nil {
 		fatal("create task", err)
-	}
-
-	// If note requested, add via separate update commit using patch format.
-	// iOS uses this two-commit pattern: blank skeleton create, then update with note.
-	// Things.app crashes on INSERT of new tasks with non-empty notes from cloud.
-	if noteText != "" {
-		u := newTaskUpdate().NotePatch(noteText)
-		editEnv := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
-		if err := history.Write(editEnv); err != nil {
-			fatal("add note to task", err)
-		}
 	}
 
 	outputJSON(map[string]string{"status": "created", "uuid": taskUUID, "title": title})
@@ -843,6 +754,37 @@ func cmdMoveToToday(history *thingscloud.History, taskUUID string) {
 	outputJSON(map[string]string{"status": "moved-to-today", "uuid": taskUUID})
 }
 
+func cmdCreateArea(history *thingscloud.History, args []string) {
+	requireArgs(args, 1, `things-cli create-area "Name" [--tags UUID,...] [--uuid UUID]`)
+
+	title := args[0]
+	opts := parseArgs(args[1:])
+
+	areaUUID := opts["uuid"]
+	if areaUUID == "" {
+		areaUUID = generateUUID()
+	}
+
+	tg := []string{}
+	if v, ok := opts["tags"]; ok && v != "" {
+		tg = strings.Split(v, ",")
+	}
+
+	payload := map[string]any{
+		"tt": title,
+		"ix": 0,
+		"tg": tg,
+		"xx": defaultExtension(),
+	}
+
+	env := writeEnvelope{id: areaUUID, action: 0, kind: "Area2", payload: payload}
+	if err := history.Write(env); err != nil {
+		fatal("create area", err)
+	}
+
+	outputJSON(map[string]string{"status": "created", "uuid": areaUUID, "title": title})
+}
+
 func cmdCreateTag(history *thingscloud.History, args []string) {
 	requireArgs(args, 1, `things-cli create-tag "Name" [--shorthand KEY] [--parent UUID]`)
 
@@ -900,6 +842,7 @@ Write commands (fast — skip state loading):
          [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD]
          [--project UUID] [--heading UUID] [--area UUID]
          [--tags UUID,...] [--type task|project|heading] [--uuid UUID]
+  create-area "Name" [--tags UUID,...] [--uuid UUID]
   create-tag "Name" [--shorthand KEY] [--parent UUID]
   edit <uuid> [--title ...] [--note ...] [--when ...] [--deadline ...] [--scheduled ...]
   complete <uuid>
@@ -934,6 +877,8 @@ func main() {
 	// Write commands — skip state loading
 	case "create":
 		cmdCreate(ctx.history, os.Args[2:])
+	case "create-area":
+		cmdCreateArea(ctx.history, os.Args[2:])
 	case "create-tag":
 		cmdCreateTag(ctx.history, os.Args[2:])
 	case "edit":
