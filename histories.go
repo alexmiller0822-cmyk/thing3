@@ -223,7 +223,8 @@ func (h *History) Write(items ...Identifiable) error {
 	req, err := http.NewRequest("POST", fmt.Sprintf("/version/1/history/%s/commit", h.ID), bytes.NewReader(bs))
 	req.Header.Add("Schema", "301")
 	req.Header.Add("Push-Priority", "5")
-	req.Header.Add("App-Instance-Id", "-com.culturedcode.ThingsMac")
+	// Full App-Instance-Id matching Things format: {hash}-{bundleId}-{hash}
+	req.Header.Add("App-Instance-Id", "000000000000000000000000000000000000000000000000000000000000000-com.culturedcode.ThingsMac-000000000000000000000000000000000000000000000000000000000000000")
 	req.Header.Add("App-Id", "com.culturedcode.ThingsMac")
 	req.Header.Add("Content-Encoding", "UTF-8")
 	req.Header.Add("Host", "cloud.culturedcode.com")
