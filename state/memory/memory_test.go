@@ -454,3 +454,25 @@ func TestState_Headings(t *testing.T) {
 		t.Errorf("expected 'Do something', got '%s'", tasks[0].Title)
 	}
 }
+
+func TestState_TasksWithoutArea_DeletedParent(t *testing.T) {
+	t.Parallel()
+	s := NewState()
+
+	taskType := things.TaskTypeTask
+
+	// Create a child task that references a parent that doesn't exist in state
+	// (simulates parent deleted by tombstone or ItemActionDeleted)
+	childPayload, _ := json.Marshal(things.TaskActionItemPayload{
+		Title:         stringVal("orphaned child"),
+		Type:          &taskType,
+		ParentTaskIDs: &[]string{"deleted-parent-id"},
+	})
+	s.Update(
+		things.Item{UUID: "child-1", Kind: things.ItemKindTask, Action: things.ItemActionCreated, P: childPayload},
+	)
+
+	// This should NOT panic even though "deleted-parent-id" is not in state.Tasks
+	result := s.TasksWithoutArea()
+	_ = result // just verify no panic
+}

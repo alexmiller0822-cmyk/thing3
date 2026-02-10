@@ -322,6 +322,9 @@ func (s *State) Subtasks(root *things.Task, opts ListOption) []*things.Task {
 }
 
 func hasArea(task *things.Task, state *State) bool {
+	if task == nil {
+		return false
+	}
 	if len(task.AreaIDs) != 0 {
 		return true
 	}

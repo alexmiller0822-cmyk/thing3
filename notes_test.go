@@ -45,6 +45,21 @@ func TestNote_ApplyPatch(t *testing.T) {
 	}
 }
 
+func TestNote_ApplyPatch_PositionBeyondLength(t *testing.T) {
+	// Patch position is beyond the string — should not panic
+	result := ApplyPatches("", []NotePatch{{Position: 10, Length: 0, Replacement: "hello"}})
+	if result != "hello" {
+		t.Errorf("expected 'hello', got '%s'", result)
+	}
+}
+
+func TestNote_ApplyPatch_LengthBeyondEnd(t *testing.T) {
+	result := ApplyPatches("AB", []NotePatch{{Position: 1, Length: 100, Replacement: "X"}})
+	if result != "AX" {
+		t.Errorf("expected 'AX', got '%s'", result)
+	}
+}
+
 func TestNote_ApplyMultiplePatches(t *testing.T) {
 	original := "ABCDEF"
 	patches := []NotePatch{
