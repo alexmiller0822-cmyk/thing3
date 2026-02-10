@@ -262,6 +262,17 @@ func (s *State) Update(items ...things.Item) error {
 				// Unsupported action: skip
 			}
 
+		case things.ItemKindTombstone:
+			item := things.TombstoneActionItem{Item: rawItem}
+			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
+				continue
+			}
+			oid := item.P.DeletedObjectID
+			delete(s.Tasks, oid)
+			delete(s.Areas, oid)
+			delete(s.Tags, oid)
+			delete(s.CheckListItems, oid)
+
 		default:
 			// Unsupported kind: skip
 		}

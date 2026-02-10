@@ -65,7 +65,8 @@ var (
 	// ItemKindTag identifies a Tag
 	ItemKindTag      ItemKind = "Tag3"
 	ItemKindTag4     ItemKind = "Tag4"
-	ItemKindTagPlain ItemKind = "Tag"
+	ItemKindTagPlain  ItemKind = "Tag"
+	ItemKindTombstone ItemKind = "Tombstone2"
 )
 
 // Timestamp allows unix epochs represented as float or ints to be unmarshalled
@@ -287,10 +288,11 @@ type Tag struct {
 
 // TagActionItemPayload describes the payload for modifying Areas
 type TagActionItemPayload struct {
-	IX           *int      `json:"ix"`
-	Title        *string   `json:"tt"`
-	ShortHand    *string   `json:"sh"`
-	ParentTagIDs *[]string `json:"pn"`
+	IX            *int            `json:"ix"`
+	Title         *string        `json:"tt"`
+	ShortHand     *string        `json:"sh"`
+	ParentTagIDs  *[]string      `json:"pn"`
+	ExtensionData json.RawMessage `json:"xx,omitempty"`
 }
 
 // TagActionItem describes an event on a tag
@@ -368,8 +370,10 @@ type CheckListActionItemPayload struct {
 	Index            *int        `json:"ix"`
 	Status           *TaskStatus `json:"ss,omitempty"`
 	Title            *string     `json:"tt,omitempty"`
-	CompletionDate   *Timestamp  `json:"sp,omitempty"`
-	TaskIDs          *[]string   `json:"ts,omitempty"`
+	CompletionDate   *Timestamp      `json:"sp,omitempty"`
+	TaskIDs          *[]string       `json:"ts,omitempty"`
+	Leavable         *bool           `json:"lt,omitempty"`
+	ExtensionData    json.RawMessage `json:"xx,omitempty"`
 }
 
 // CheckListActionItem describes an event on a check list item
@@ -381,4 +385,21 @@ type CheckListActionItem struct {
 // UUID returns the UUID of the modified CheckListItem
 func (item CheckListActionItem) UUID() string {
 	return item.Item.UUID
+}
+
+// TombstoneActionItemPayload describes the payload for tombstone deletion records
+type TombstoneActionItemPayload struct {
+	DeletedObjectID string  `json:"dloid"`
+	DeletionDate    float64 `json:"dld"`
+}
+
+// TombstoneActionItem describes a tombstone deletion event
+type TombstoneActionItem struct {
+	Item
+	P TombstoneActionItemPayload `json:"p"`
+}
+
+// UUID returns the UUID of the TombstoneActionItem
+func (t TombstoneActionItem) UUID() string {
+	return t.Item.UUID
 }
