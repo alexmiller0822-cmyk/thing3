@@ -73,7 +73,7 @@ type FullTaskPayload struct {
 	Cd   float64          `json:"cd"`            // creation date
 	Lt   bool             `json:"lt"`            // ?
 	Icc  int              `json:"icc"`           // instance creation count
-	Md   float64          `json:"md"`            // modification date - NOTE: md before ti in Things
+	Md   *float64         `json:"md"`            // modification date - NULL for new creates
 	Ti   int              `json:"ti"`            // today index
 	Dd   *int64           `json:"dd"`            // deadline (unix)
 	Ato  *int             `json:"ato"`           // alarm time offset (seconds)
@@ -571,7 +571,7 @@ func createTaskFull(history *thingscloud.History, args []string) {
 	}
 
 	// Build full payload matching Things format EXACTLY from Proxyman capture
-	// Key: sr/tir null for inbox, arrays always [], field order matches capture
+	// Key: sr/tir null for inbox, md null for new creates, arrays always []
 	payload := FullTaskPayload{
 		Tp:   tp,
 		Sr:   sr,    // null for inbox/anytime
@@ -594,7 +594,7 @@ func createTaskFull(history *thingscloud.History, args []string) {
 		Cd:   nowTs, // fractional unix timestamp
 		Lt:   false,
 		Icc:  0,
-		Md:   nowTs, // fractional unix timestamp
+		Md:   nil,   // NULL for new creates! Things sets this on first edit
 		Ti:   0,
 		Dd:   dd,
 		Ato:  nil,
