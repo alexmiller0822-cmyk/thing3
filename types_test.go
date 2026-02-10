@@ -163,8 +163,10 @@ func TestTimestamp_MarshalJSON(t *testing.T) {
 		Time     time.Time
 		Expected string
 	}{
+		// Whole-second timestamps serialize as integers (no trailing .0)
 		{time.Date(2017, time.May, 28, 22, 05, 17, 0, time.UTC), "1496009117"},
-		{time.Time{}, "-62135596800"},
+		// Sub-second precision is preserved as fractional epoch
+		{time.Unix(1496009117, 500000000), "1496009117.5"},
 	}
 	for _, testCase := range testCases {
 

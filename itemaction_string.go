@@ -37,7 +37,7 @@ func (i TaskStatus) String() string {
 	}
 }
 
-const _TaskSchedule_name = "TaskScheduleTodayTaskScheduleAnytimeTaskScheduleSomeday"
+const _TaskSchedule_name = "TaskScheduleInboxTaskScheduleAnytimeTaskScheduleSomeday"
 
 var _TaskSchedule_index = [...]uint8{0, 17, 36, 55}
 

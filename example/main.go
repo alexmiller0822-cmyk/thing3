@@ -190,8 +190,14 @@ Tags:           %d
 	}
 
 	fmt.Printf("Today\n")
+	currentTime := time.Now()
+	todayStart := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, time.UTC)
 	for _, task := range state.Tasks {
-		if task.Schedule != thingscloud.TaskScheduleToday {
+		// Today = started (Anytime) with sr/tir set to today's date
+		if task.Schedule != thingscloud.TaskScheduleAnytime {
+			continue
+		}
+		if task.ScheduledDate == nil || !task.ScheduledDate.Equal(todayStart) {
 			continue
 		}
 		if task.Status != thingscloud.TaskStatusPending {

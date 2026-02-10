@@ -23,12 +23,19 @@ const (
 type TaskSchedule int
 
 const (
-	// TaskScheduleToday indicates tasks which should be completed today
-	TaskScheduleToday TaskSchedule = 0
-	// TaskScheduleAnytime indicates tasks which can be completed anyday
+	// TaskScheduleInbox indicates unprocessed tasks in the Inbox (st=0)
+	TaskScheduleInbox TaskSchedule = 0
+	// TaskScheduleAnytime indicates started tasks; displayed in Today when sr/tir
+	// are set to today's date, or in Anytime when sr/tir are null (st=1)
 	TaskScheduleAnytime TaskSchedule = 1
-	// TaskScheduleSomeday indicates tasks which might never be completed
+	// TaskScheduleSomeday indicates deferred tasks; displayed in Upcoming when
+	// sr/tir have a future date, or in Someday when sr/tir are null (st=2)
 	TaskScheduleSomeday TaskSchedule = 2
+
+	// TaskScheduleToday is deprecated: use TaskScheduleAnytime with sr/tir dates.
+	// The "st" field value 0 actually means Inbox, not Today.
+	// Kept for backward compatibility.
+	TaskScheduleToday = TaskScheduleInbox
 )
 
 // TaskStatus describes if a thing is completed or not
@@ -73,20 +80,25 @@ var (
 // into time.Time objects
 type Timestamp time.Time
 
-// UnmarshalJSON takes a unix epoch from float/ int and creates a time.Time instance
+// UnmarshalJSON takes a unix epoch from float/ int and creates a time.Time instance,
+// preserving sub-second precision.
 func (t *Timestamp) UnmarshalJSON(bs []byte) error {
 	var d float64
 	if err := json.Unmarshal(bs, &d); err != nil {
 		return err
 	}
-	*t = Timestamp(time.Unix(int64(d), 0).UTC())
+	sec := int64(d)
+	nsec := int64((d - float64(sec)) * 1e9)
+	*t = Timestamp(time.Unix(sec, nsec).UTC())
 	return nil
 }
 
-// MarshalJSON convers a timestamp into unix nano representation
+// MarshalJSON converts a timestamp into a fractional unix epoch (seconds with sub-second precision),
+// matching the format used by the Things Cloud API (e.g. 1770713623.4716659).
 func (t *Timestamp) MarshalJSON() ([]byte, error) {
-	var tt = time.Time(*t).Unix()
-	return json.Marshal(tt)
+	tt := time.Time(*t)
+	ts := float64(tt.UnixNano()) / 1e9
+	return json.Marshal(ts)
 }
 
 // Format returns a textual representation of the time value formatted according to layout

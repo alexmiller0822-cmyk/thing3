@@ -237,15 +237,22 @@ func main() {
 }
 
 func listTasks(state *memory.State, todayOnly, inboxOnly bool, areaFilter string) {
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
 	var tasks []TaskOutput
 	for _, task := range state.Tasks {
 		if task.InTrash || task.Status == 3 || task.Type == thingscloud.TaskTypeProject {
 			continue
 		}
-		if todayOnly && task.Schedule != 2 {
-			continue
+		// Today = started (st=1) with sr/tir = today's date
+		if todayOnly {
+			if task.Schedule != thingscloud.TaskScheduleAnytime || task.ScheduledDate == nil || !task.ScheduledDate.Equal(todayStart) {
+				continue
+			}
 		}
-		if inboxOnly && task.Schedule != 0 {
+		// Inbox = st=0
+		if inboxOnly && task.Schedule != thingscloud.TaskScheduleInbox {
 			continue
 		}
 		tasks = append(tasks, taskToOutput(task))
@@ -494,27 +501,32 @@ func createTaskFull(history *thingscloud.History, args []string) {
 		}
 	}
 
-	// Determine schedule
-	// Things uses null for sr/tir on inbox/anytime tasks, only sets for today/scheduled
-	var st int = 0 // Inbox by default (matching Things behavior on new task)
+	// Determine schedule (st field)
+	// Per HAR capture analysis:
+	//   st=0: Inbox (sr=null, tir=null)
+	//   st=1: Anytime/Today — Today when sr/tir = today's date, Anytime when null
+	//   st=2: Someday/Upcoming — Upcoming when sr/tir = future date, Someday when null
+	var st int = 0 // Inbox by default
 	var sr *int64 = nil
 	var tir *int64 = nil
-	
+
 	if when, ok := opts["when"]; ok {
 		switch when {
 		case "today":
-			st = 2
-			// For today, set sr/tir to UTC midnight
+			st = 1 // "started" — with today's date makes it appear in Today
 			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 			todayTs := today.Unix()
 			sr = &todayTs
 			tir = &todayTs
-		case "someday", "anytime":
-			st = 1
-			// sr/tir stay null for anytime
+		case "anytime":
+			st = 1 // "started" — without dates appears in Anytime
+			// sr/tir stay null
+		case "someday":
+			st = 2 // deferred — without dates appears in Someday
+			// sr/tir stay null
 		case "inbox":
-			st = 0
-			// sr/tir stay null for inbox
+			st = 0 // unprocessed
+			// sr/tir stay null
 		}
 	}
 
@@ -700,17 +712,21 @@ func editTask(history *thingscloud.History, taskUUID string, args []string) {
 	if when, ok := opts["when"]; ok {
 		switch when {
 		case "today":
-			p["st"] = 2
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			p["st"] = 1 // started — with today's date = Today view
+			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 			todayTs := today.Unix()
 			p["sr"] = todayTs
 			p["tir"] = todayTs
-		case "someday", "anytime":
-			p["st"] = 1
+		case "anytime":
+			p["st"] = 1 // started — without dates = Anytime view
+			p["sr"] = nil
+			p["tir"] = nil
+		case "someday":
+			p["st"] = 2 // deferred — Someday view
 			p["sr"] = nil
 			p["tir"] = nil
 		case "inbox":
-			p["st"] = 0
+			p["st"] = 0 // unprocessed — Inbox view
 			p["sr"] = nil
 			p["tir"] = nil
 		}
