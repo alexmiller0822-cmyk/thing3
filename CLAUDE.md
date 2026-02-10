@@ -50,6 +50,20 @@ Tests use `httptest.Server` with pre-recorded JSON responses in the `tapes/` dir
 
 `cmd/thingsweb/` contains a Polymer-based web UI with its own build process (see its README). It uses `statik` for static file embedding.
 
+### Schedule Field (`st`) Mapping
+
+The `st` JSON field maps to the `start` column in Things' SQLite DB. It represents a task's start state, **not** which UI view it belongs to. The view is determined by `st` + `sr`/`tir` dates:
+
+| `st` | Constant | + `sr`/`tir` | Things view |
+|------|----------|-------------|-------------|
+| 0 | `TaskScheduleInbox` | null | Inbox |
+| 1 | `TaskScheduleAnytime` | today's date | Today |
+| 1 | `TaskScheduleAnytime` | null | Anytime |
+| 2 | `TaskScheduleSomeday` | future date | Upcoming |
+| 2 | `TaskScheduleSomeday` | null | Someday |
+
+See `docs/client-side-bugs.md` for the full investigation.
+
 ## Environment Variables
 
 The example app and real usage require:
