@@ -101,6 +101,24 @@ func (s *State) updateTask(item things.TaskActionItem) *things.Task {
 	if item.P.Title != nil {
 		t.Title = *item.P.Title
 	}
+	if item.P.AlarmTimeOffset != nil {
+		t.AlarmTimeOffset = item.P.AlarmTimeOffset
+	}
+	if item.P.TagIDs != nil {
+		t.TagIDs = item.P.TagIDs
+	}
+	if item.P.DueOrder != nil {
+		t.DueOrder = *item.P.DueOrder
+	}
+	if item.P.TaskIndex != nil {
+		t.TodayIndex = *item.P.TaskIndex
+	}
+	if item.P.DelegateIDs != nil {
+		t.DelegateIDs = *item.P.DelegateIDs
+	}
+	if item.P.RecurrenceTaskIDs != nil {
+		t.RecurrenceIDs = *item.P.RecurrenceTaskIDs
+	}
 
 	return t
 }

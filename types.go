@@ -180,9 +180,15 @@ type Task struct {
 	AreaIDs          []string
 	ParentTaskIDs    []string
 	ActionGroupIDs   []string
-	InTrash          bool
-	Schedule         TaskSchedule
-	Type             TaskType
+	InTrash         bool
+	Schedule        TaskSchedule
+	Type            TaskType
+	TodayIndex      int
+	DueOrder        int
+	AlarmTimeOffset *int
+	TagIDs          []string
+	RecurrenceIDs   []string
+	DelegateIDs     []string
 }
 
 // TaskActionItemPayload describes the payload for modifying Tasks, and also Projects,
@@ -207,7 +213,20 @@ type TaskActionItemPayload struct {
 	RecurrenceTaskIDs *[]string              `json:"rt,omitempty"`
 	Schedule          *TaskSchedule          `json:"st,omitempty"`
 	ActionGroupIDs    *[]string              `json:"agr,omitempty"`
-	Repeater          *RepeaterConfiguration `json:"rr,omitempty"`
+	Repeater                  *RepeaterConfiguration `json:"rr,omitempty"`
+	DueOrder                  *int                   `json:"do,omitempty"`
+	Leavable                  *bool                  `json:"lt,omitempty"`
+	IsCompletedByChildren     *bool                  `json:"icp,omitempty"`
+	IsCompletedCount          *int                   `json:"icc,omitempty"`
+	InstanceCreationStartDate *Timestamp             `json:"icsd,omitempty"`
+	SubtaskBehavior           *int                   `json:"sb,omitempty"`
+	DelegateIDs               *[]string              `json:"dl,omitempty"`
+	LastActionItemID          *string                `json:"lai,omitempty"`
+	ReminderDate              *Timestamp             `json:"rmd,omitempty"`
+	AlarmTimeOffset           *int                   `json:"ato,omitempty"`
+	ActionRequiredDate        *Timestamp             `json:"acrd,omitempty"`
+	DeadlineSuppression       *Timestamp             `json:"dds,omitempty"`
+	ExtensionData             json.RawMessage        `json:"xx,omitempty"`
 	//  {
 	//      "acrd": null,
 	//      "ar": [],

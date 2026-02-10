@@ -99,6 +99,39 @@ func TestTimestamp_UnmarshalJSON(t *testing.T) {
 	}
 }
 
+func TestTaskActionItemPayload_AllFields(t *testing.T) {
+	raw := `{
+		"tt":"test","tp":0,"st":1,"ss":0,
+		"sr":1770681600,"tir":1770681600,"dd":1771027200,"dds":null,
+		"tr":false,"sp":null,"cd":1770713623.47,"md":1770713627.59,
+		"ix":-346833,"ti":0,"do":0,"lt":false,"icp":false,"icc":0,
+		"icsd":null,"sb":0,"ato":39600,"rmd":null,"acrd":null,
+		"dl":[],"lai":null,
+		"nt":{"_t":"tx","t":1,"ch":0,"v":""},
+		"tg":[],"ar":[],"pr":[],"agr":[],"rt":[],"rr":null,
+		"xx":{"sn":{},"_t":"oo"}
+	}`
+	var p TaskActionItemPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if p.DueOrder == nil || *p.DueOrder != 0 {
+		t.Error("expected DueOrder=0")
+	}
+	if p.AlarmTimeOffset == nil || *p.AlarmTimeOffset != 39600 {
+		t.Error("expected AlarmTimeOffset=39600")
+	}
+	if p.Leavable == nil || *p.Leavable != false {
+		t.Error("expected Leavable=false")
+	}
+	if p.SubtaskBehavior == nil || *p.SubtaskBehavior != 0 {
+		t.Error("expected SubtaskBehavior=0")
+	}
+	if p.ExtensionData == nil {
+		t.Error("expected ExtensionData to be set")
+	}
+}
+
 func TestTimestamp_MarshalJSON(t *testing.T) {
 	testCases := []struct {
 		Time     time.Time
