@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -48,7 +48,7 @@ func (h *History) Sync() error {
 		return fmt.Errorf("http response code: %s", resp.Status)
 	}
 
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (c *Client) History(id string) (*History, error) {
 		}
 		return nil, fmt.Errorf("http response code: %s", resp.Status)
 	}
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (c *Client) Histories() ([]*History, error) {
 		}
 		return nil, fmt.Errorf("http response code: %s", resp.Status)
 	}
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (c *Client) CreateHistory() (*History, error) {
 		return nil, fmt.Errorf("http response code: %s", resp.Status)
 
 	}
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func (h *History) Write(items ...Identifiable) error {
 		log.Println(string(bs))
 		return fmt.Errorf("Write failed: %d", resp.StatusCode)
 	}
-	rs, err := ioutil.ReadAll(resp.Body)
+	rs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

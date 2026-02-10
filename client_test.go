@@ -2,7 +2,7 @@ package thingscloud
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,7 +28,7 @@ func fakeServer(t fakeResponse) *httptest.Server {
 		}
 		defer f.Close()
 
-		content, err := ioutil.ReadAll(f)
+		content, err := io.ReadAll(f)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Printf("Unable to load fixture %q path %q", t.file, r.URL.Path)

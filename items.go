@@ -3,7 +3,7 @@ package thingscloud
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 )
@@ -56,7 +56,7 @@ func (h *History) Items(opts ItemsOptions) ([]Item, bool, error) {
 		return nil, false, fmt.Errorf("http response code: %s", resp.Status)
 	}
 
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, false, err
 	}

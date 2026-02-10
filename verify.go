@@ -3,7 +3,7 @@ package thingscloud
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -44,7 +44,7 @@ func (c *Client) Verify() (*VerifyResponse, error) {
 		return nil, fmt.Errorf("http response code: %s", resp.Status)
 	}
 	var v VerifyResponse
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
