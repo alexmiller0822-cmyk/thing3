@@ -129,11 +129,11 @@
               item.TaskIDs.find((id) => id === task.UUID) != null
             )
           )
-        const tasks = data.detail.response.tasks.filter((task) => !task.IsProject && task.ParentTaskIDs.length === 0);
+        const tasks = data.detail.response.tasks.filter((task) => task.Type !== 1 && task.ParentTaskIDs.length === 0);
         this.tasks = tasks.filter((task) => task.Status !== 3);
         this.doneTasks = tasks.filter((task) => task.Status === 3);
         const projects = data.detail.response.tasks
-          .filter((task) => task.IsProject)
+          .filter((task) => task.Type === 1)
         projects.forEach(
           (project) =>
             project.Subtasks = data.detail.response.tasks

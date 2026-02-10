@@ -47,6 +47,38 @@ func TestBoolean_MarshalJSON(t *testing.T) {
 	}
 }
 
+func TestTaskType_Values(t *testing.T) {
+	if TaskTypeTask != 0 {
+		t.Errorf("expected TaskTypeTask=0, got %d", TaskTypeTask)
+	}
+	if TaskTypeProject != 1 {
+		t.Errorf("expected TaskTypeProject=1, got %d", TaskTypeProject)
+	}
+	if TaskTypeHeading != 2 {
+		t.Errorf("expected TaskTypeHeading=2, got %d", TaskTypeHeading)
+	}
+}
+
+func TestTaskType_JSONRoundTrip(t *testing.T) {
+	type wrapper struct {
+		TP *TaskType `json:"tp"`
+	}
+	tp := TaskTypeHeading
+	w := wrapper{TP: &tp}
+	bs, err := json.Marshal(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(bs) != `{"tp":2}` {
+		t.Errorf("expected {\"tp\":2}, got %s", string(bs))
+	}
+	var w2 wrapper
+	json.Unmarshal(bs, &w2)
+	if *w2.TP != TaskTypeHeading {
+		t.Errorf("expected TaskTypeHeading, got %d", *w2.TP)
+	}
+}
+
 func TestTimestamp_UnmarshalJSON(t *testing.T) {
 	testCases := []struct {
 		JSON     string

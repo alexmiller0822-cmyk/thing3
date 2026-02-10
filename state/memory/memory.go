@@ -41,8 +41,8 @@ func (s *State) updateTask(item things.TaskActionItem) *things.Task {
 	if item.P.Title != nil {
 		t.Title = *item.P.Title
 	}
-	if item.P.IsProject != nil {
-		t.IsProject = bool(*item.P.IsProject)
+	if item.P.Type != nil {
+		t.Type = *item.P.Type
 	}
 	if item.P.Status != nil {
 		t.Status = *item.P.Status
@@ -255,7 +255,7 @@ func (s *State) Update(items ...things.Item) error {
 func (s *State) Projects() []*things.Task {
 	tasks := []*things.Task{}
 	for _, task := range s.Tasks {
-		if !task.IsProject {
+		if task.Type != things.TaskTypeProject {
 			continue
 		}
 		tasks = append(tasks, task)
@@ -341,7 +341,7 @@ func (s *State) AreaByName(name string) *things.Area {
 // ProjectByName returns an project if the name matches
 func (s *State) ProjectByName(name string) *things.Task {
 	for _, task := range s.Tasks {
-		if !task.IsProject {
+		if task.Type != things.TaskTypeProject {
 			continue
 		}
 		if task.Title == name {

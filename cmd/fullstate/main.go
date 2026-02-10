@@ -72,6 +72,6 @@ func main() {
 		if task.InTrash {
 			status = "trashed"
 		}
-		fmt.Printf("- [%s] %s (project:%v)\n", status, task.Title, task.IsProject)
+		fmt.Printf("- [%s] %s (project:%v)\n", status, task.Title, task.Type == thingscloud.TaskTypeProject)
 	}
 }

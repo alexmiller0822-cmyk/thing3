@@ -121,6 +121,15 @@ func (b *Boolean) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d)
 }
 
+// TaskType describes the type of a task entity
+type TaskType int
+
+const (
+	TaskTypeTask    TaskType = 0
+	TaskTypeProject TaskType = 1
+	TaskTypeHeading TaskType = 2
+)
+
 // Task describes a Task inside things.
 // 0|uuid|TEXT|0||1
 // 1|userModificationDate|REAL|0||0
@@ -173,7 +182,7 @@ type Task struct {
 	ActionGroupIDs   []string
 	InTrash          bool
 	Schedule         TaskSchedule
-	IsProject        bool
+	Type             TaskType
 }
 
 // TaskActionItemPayload describes the payload for modifying Tasks, and also Projects,
@@ -187,7 +196,7 @@ type TaskActionItemPayload struct {
 	DeadlineDate      *Timestamp             `json:"dd,omitempty"`  //
 	TaskIR            *Timestamp             `json:"tir,omitempty"` // hm, not sure what tir stands for
 	Status            *TaskStatus            `json:"ss,omitempty"`
-	IsProject         *Boolean               `json:"tp,omitempty"`
+	Type              *TaskType              `json:"tp,omitempty"`
 	Title             *string                `json:"tt,omitempty"`
 	Note              json.RawMessage        `json:"nt,omitempty"`
 	AreaIDs           *[]string              `json:"ar,omitempty"`

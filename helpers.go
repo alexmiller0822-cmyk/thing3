@@ -17,6 +17,11 @@ func Schedule(val TaskSchedule) *TaskSchedule {
 	return &val
 }
 
+// TaskTypePtr returns a pointer to a TaskType
+func TaskTypePtr(val TaskType) *TaskType {
+	return &val
+}
+
 // Time returns a pointer to a Time
 func Time(val time.Time) *Timestamp {
 	ts := Timestamp(val)

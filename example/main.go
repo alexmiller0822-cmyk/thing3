@@ -95,7 +95,6 @@ func main() {
 
 	pending := thingscloud.TaskStatusPending
 	anytime := thingscloud.TaskScheduleAnytime
-	no := thingscloud.Boolean(false)
 	taskUUID := uuid.New().String()
 	now := thingscloud.Timestamp(time.Now())
 	date := thingscloud.Timestamp(time.Now().Truncate(24 * time.Hour))
@@ -118,7 +117,7 @@ func main() {
 			TaskIR:           &date,
 			Index:            &idx,
 			TaskIndex:        &todayIdx,
-			IsProject:        &no,
+			Type:             thingscloud.TaskTypePtr(thingscloud.TaskTypeTask),
 		},
 	}); err != nil {
 		log.Fatalf("Task creation failed failed: %q\n", err.Error())

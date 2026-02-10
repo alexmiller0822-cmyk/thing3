@@ -84,7 +84,7 @@ func (api *areaAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	tasks := api.state.TasksByArea(api.area, listOpts)
 	for _, task := range tasks {
-		if !task.IsProject {
+		if task.Type != thingscloud.TaskTypeProject {
 			continue
 		}
 		tasks = append(tasks, api.state.Subtasks(task, listOpts)...)
