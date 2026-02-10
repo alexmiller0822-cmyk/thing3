@@ -2,7 +2,7 @@ package memory
 
 import (
 	"encoding/json"
-	"fmt"
+	// "fmt"
 	"sort"
 
 	things "github.com/nicolai86/things-cloud-sdk"
@@ -178,7 +178,7 @@ func (s *State) Update(items ...things.Item) error {
 		case things.ItemKindTask, things.ItemKindTask4, things.ItemKindTask3, things.ItemKindTaskPlain:
 			item := things.TaskActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
-				return err
+				continue // Skip items that can't be parsed
 			}
 
 			switch item.Action {
@@ -189,13 +189,13 @@ func (s *State) Update(items ...things.Item) error {
 			case things.ItemActionDeleted:
 				delete(s.Tasks, item.UUID())
 			default:
-				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
+				// Unsupported action: skip
 			}
 
 		case things.ItemKindChecklistItem, things.ItemKindChecklistItem2, things.ItemKindChecklistItem3:
 			item := things.CheckListActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
-				return err
+				continue // Skip unparseable items
 			}
 
 			switch item.Action {
@@ -206,13 +206,13 @@ func (s *State) Update(items ...things.Item) error {
 			case things.ItemActionDeleted:
 				delete(s.CheckListItems, item.UUID())
 			default:
-				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
+				// Unsupported action: skip
 			}
 
 		case things.ItemKindArea, things.ItemKindArea3, things.ItemKindAreaPlain:
 			item := things.AreaActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
-				return err
+				continue // Skip unparseable items
 			}
 
 			switch item.Action {
@@ -224,13 +224,13 @@ func (s *State) Update(items ...things.Item) error {
 			case things.ItemActionDeleted:
 				delete(s.Areas, item.UUID())
 			default:
-				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
+				// Unsupported action: skip
 			}
 
 		case things.ItemKindTag, things.ItemKindTag4, things.ItemKindTagPlain:
 			item := things.TagActionItem{Item: rawItem}
 			if err := json.Unmarshal(rawItem.P, &item.P); err != nil {
-				return err
+				continue // Skip unparseable items
 			}
 
 			switch item.Action {
@@ -241,11 +241,11 @@ func (s *State) Update(items ...things.Item) error {
 			case things.ItemActionDeleted:
 				delete(s.Tags, item.UUID())
 			default:
-				fmt.Printf("Action %q on %q is not implemented yet", item.Action, rawItem.Kind)
+				// Unsupported action: skip
 			}
 
 		default:
-			fmt.Printf("%q is not implemented yet\n", rawItem.Kind)
+			// Unsupported kind: skip
 		}
 	}
 	return nil
