@@ -32,6 +32,10 @@ type RepeaterConfiguration struct {
 	FrequencyAmplitude  int64                         `json:"fa"`
 	DetailConfiguration []RepeaterDetailConfiguration `json:"of"`
 	LastScheduledAt     *Timestamp                    `json:"ed,omitempty"`
+	Version             int                           `json:"rrv,omitempty"`
+	Type                int                           `json:"tp,omitempty"`
+	TimeShift           int                           `json:"ts,omitempty"`
+	StartReference      *Timestamp                    `json:"sr,omitempty"`
 }
 
 // IsNeverending determines if a recurring rule has a specific end

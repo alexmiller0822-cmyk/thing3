@@ -42,6 +42,31 @@ var (
 	rcLastWednesdayFebuaryEveryYear              = []byte(`{"ia":1519776000,"rrv":4,"tp":0,"of":[{"wdo":-1,"wd":3,"mo":1}],"fu":4,"sr":1519776000,"fa":1,"rc":0,"ts":0,"ed":64092211200}`)
 )
 
+func TestRepeaterConfiguration_NewFields(t *testing.T) {
+	raw := `{
+		"ia":1770681600,"rrv":4,
+		"of":[{"wd":2}],"ts":0,"fu":256,
+		"rc":0,"fa":1,"tp":1,"sr":1770681600,
+		"ed":64092211200
+	}`
+	var rc RepeaterConfiguration
+	if err := json.Unmarshal([]byte(raw), &rc); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if rc.Version != 4 {
+		t.Errorf("expected Version=4, got %d", rc.Version)
+	}
+	if rc.Type != 1 {
+		t.Errorf("expected Type=1, got %d", rc.Type)
+	}
+	if rc.TimeShift != 0 {
+		t.Errorf("expected TimeShift=0, got %d", rc.TimeShift)
+	}
+	if rc.StartReference == nil {
+		t.Error("expected StartReference to be set")
+	}
+}
+
 func TestRepeaterConfiguration_IsNeverending(t *testing.T) {
 	ts := &Timestamp{}
 	ts.UnmarshalJSON([]byte(`64092211200`))
