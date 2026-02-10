@@ -12,343 +12,465 @@ import (
 	memory "github.com/nicolai86/things-cloud-sdk/state/memory"
 )
 
-type TaskOutput struct {
-	UUID          string  `json:"uuid"`
-	Title         string  `json:"title"`
-	Note          string  `json:"note,omitempty"`
-	Status        int     `json:"status"`
-	InTrash       bool    `json:"inTrash"`
-	IsProject     bool    `json:"isProject"`
-	Schedule      int     `json:"schedule"`
-	ScheduledDate *string `json:"scheduledDate,omitempty"`
-	DeadlineDate  *string `json:"deadlineDate,omitempty"`
-	AreaIDs       []string `json:"areaIds,omitempty"`
-	ParentIDs     []string `json:"parentIds,omitempty"`
+// ---------------------------------------------------------------------------
+// Wire-format types (no omitempty — Things expects all fields on creates)
+// ---------------------------------------------------------------------------
+
+// WireNote matches the Things note wire format exactly.
+type WireNote struct {
+	TypeTag  string `json:"_t"`
+	Checksum int64  `json:"ch"`
+	Value    string `json:"v"`
+	Type     int    `json:"t"`
 }
 
-// ThingsNote represents the note format Things expects
-// IMPORTANT: Field order must match Things exactly: _t, ch, v, t
-type ThingsNote struct {
-	Typ string      `json:"_t"`           // always "tx" - MUST be first
-	Ch  int64       `json:"ch"`           // checksum
-	V   string      `json:"v"`            // value for simple notes (MUST include even if empty)
-	T   int         `json:"t"`            // 1 = empty/simple, 2 = with patches - MUST be last
-	Ps  []NotePatch `json:"ps,omitempty"` // patches for complex notes
+// WireExtension is the required xx field: {sn: {}, _t: "oo"}.
+type WireExtension struct {
+	Sn      map[string]any `json:"sn"`
+	TypeTag string         `json:"_t"`
 }
 
-type NotePatch struct {
-	R  string `json:"r"`  // replacement text
-	P  int    `json:"p"`  // position
-	L  int    `json:"l"`  // length to replace
-	Ch int64  `json:"ch"` // checksum
+// writeEnvelope is a single generic wrapper for history.Write().
+// Implements Identifiable (UUID()) and json.Marshaler.
+type writeEnvelope struct {
+	id      string
+	action  int
+	kind    string
+	payload any
 }
 
-// ThingsExtension is the required xx field
-type ThingsExtension struct {
-	Sn  map[string]interface{} `json:"sn"`
-	Typ string                 `json:"_t"` // always "oo"
+func (w writeEnvelope) UUID() string { return w.id }
+
+func (w writeEnvelope) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		T int    `json:"t"`
+		E string `json:"e"`
+		P any    `json:"p"`
+	}{w.action, w.kind, w.payload})
 }
 
-// FullTaskPayload matches what Things actually sends
-// Field order matches Proxyman capture exactly
-type FullTaskPayload struct {
-	Tp   int              `json:"tp"`            // type: 0=task, 1=project, 2=heading
-	Sr   *int64           `json:"sr"`            // scheduled date (unix) - NULL for inbox/anytime
-	Dds  *int64           `json:"dds"`           // deadline suppression date
-	Rt   []string         `json:"rt"`            // repeating template IDs
-	Rmd  *int64           `json:"rmd"`           // reminder date?
-	Ss   int              `json:"ss"`            // status: 0=open, 3=complete
-	Tr   bool             `json:"tr"`            // in trash
-	Dl   []string         `json:"dl"`            // delegate
-	Icp  bool             `json:"icp"`           // instance creation paused
-	St   int              `json:"st"`            // schedule: 0=inbox, 1=anytime, 2=today
-	Ar   []string         `json:"ar"`            // area IDs
-	Tt   string           `json:"tt"`            // title
-	Do   int              `json:"do"`            // due date offset
-	Lai  *int64           `json:"lai"`           // last alarm interaction
-	Tir  *int64           `json:"tir"`           // today index reference date - NULL for inbox/anytime
-	Tg   []string         `json:"tg"`            // tag IDs
-	Agr  []string         `json:"agr"`           // action group IDs
-	Ix   int              `json:"ix"`            // index (Things uses negative values)
-	Cd   float64          `json:"cd"`            // creation date
-	Lt   bool             `json:"lt"`            // ?
-	Icc  int              `json:"icc"`           // instance creation count
-	Md   *float64         `json:"md"`            // modification date - NULL for new creates
-	Ti   int              `json:"ti"`            // today index
-	Dd   *int64           `json:"dd"`            // deadline (unix)
-	Ato  *int             `json:"ato"`           // alarm time offset (seconds)
-	Nt   ThingsNote       `json:"nt"`            // note
-	Icsd *int64           `json:"icsd"`          // instance creation start date
-	Pr   []string         `json:"pr"`            // parent/project IDs
-	Rp   *string          `json:"rp"`            // ?
-	Acrd *int64           `json:"acrd"`          // after completion reference date
-	Sp   *float64         `json:"sp"`            // stop/completion date
-	Sb   int              `json:"sb"`            // start bucket
-	Rr   *json.RawMessage `json:"rr"`            // recurrence rule
-	Xx   ThingsExtension  `json:"xx"`            // extension
+// TaskCreatePayload — all 34 fields, no omitempty, field order matches HAR.
+type TaskCreatePayload struct {
+	Tp   int              `json:"tp"`
+	Sr   *int64           `json:"sr"`
+	Dds  *int64           `json:"dds"`
+	Rt   []string         `json:"rt"`
+	Rmd  *int64           `json:"rmd"`
+	Ss   int              `json:"ss"`
+	Tr   bool             `json:"tr"`
+	Dl   []string         `json:"dl"`
+	Icp  bool             `json:"icp"`
+	St   int              `json:"st"`
+	Ar   []string         `json:"ar"`
+	Tt   string           `json:"tt"`
+	Do   int              `json:"do"`
+	Lai  *int64           `json:"lai"`
+	Tir  *int64           `json:"tir"`
+	Tg   []string         `json:"tg"`
+	Agr  []string         `json:"agr"`
+	Ix   int              `json:"ix"`
+	Cd   float64          `json:"cd"`
+	Lt   bool             `json:"lt"`
+	Icc  int              `json:"icc"`
+	Md   *float64         `json:"md"`
+	Ti   int              `json:"ti"`
+	Dd   *int64           `json:"dd"`
+	Ato  *int             `json:"ato"`
+	Nt   WireNote         `json:"nt"`
+	Icsd *int64           `json:"icsd"`
+	Pr   []string         `json:"pr"`
+	Rp   *string          `json:"rp"`
+	Acrd *int64           `json:"acrd"`
+	Sp   *float64         `json:"sp"`
+	Sb   int              `json:"sb"`
+	Rr   *json.RawMessage `json:"rr"`
+	Xx   WireExtension    `json:"xx"`
 }
 
-// FullTaskItem wraps the payload for API
-type FullTaskItem struct {
-	T int             `json:"t"` // 0=create, 1=modify, 2=delete
-	E string          `json:"e"` // "Task6"
-	P FullTaskPayload `json:"p"`
+// ChecklistItemCreatePayload — all 9 fields for checklist item creation.
+type ChecklistItemCreatePayload struct {
+	Cd   float64       `json:"cd"`
+	Md   *float64      `json:"md"`
+	Tt   string        `json:"tt"`
+	Ss   int           `json:"ss"`
+	Sp   *float64      `json:"sp"`
+	Ix   int           `json:"ix"`
+	Ts   []string      `json:"ts"`
+	Lt   bool          `json:"lt"`
+	Xx   WireExtension `json:"xx"`
 }
 
-func (f FullTaskItem) UUID() string {
-	return "" // Will be set in the map key
+// TagCreatePayload — all 5 fields for tag creation.
+type TagCreatePayload struct {
+	Tt string        `json:"tt"`
+	Ix int           `json:"ix"`
+	Sh *string       `json:"sh"`
+	Pn []string      `json:"pn"`
+	Xx WireExtension `json:"xx"`
 }
 
-// Wrapper to make it implement Identifiable
-type TaskItemWrapper struct {
-	uuid string
-	item FullTaskItem
+// ---------------------------------------------------------------------------
+// Helpers: notes, UUID, timestamps, errors
+// ---------------------------------------------------------------------------
+
+func noteChecksum(s string) int64 {
+	var ch int64
+	for _, c := range s {
+		ch = (ch*31 + int64(c)) & 0xFFFFFFFF
+	}
+	return ch
 }
 
-func (w TaskItemWrapper) UUID() string {
-	return w.uuid
+func emptyNote() WireNote {
+	return WireNote{TypeTag: "tx", Checksum: 0, Value: "", Type: 1}
 }
 
-func (w TaskItemWrapper) MarshalJSON() ([]byte, error) {
-	return json.Marshal(w.item)
+func textNote(s string) WireNote {
+	return WireNote{TypeTag: "tx", Checksum: noteChecksum(s), Value: s, Type: 1}
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: things-cli <command> [args]")
-		fmt.Fprintln(os.Stderr, "Commands: list, today, inbox, area, project, show, create, edit, complete, delete, purge")
-		os.Exit(1)
+func defaultExtension() WireExtension {
+	return WireExtension{Sn: map[string]any{}, TypeTag: "oo"}
+}
+
+func generateUUID() string {
+	u := uuid.New()
+	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	result := make([]byte, 22)
+	bytes := u[:]
+	for i := 0; i < 22; i++ {
+		result[i] = chars[int(bytes[i%16])%len(chars)]
+	}
+	return string(result)
+}
+
+func nowTs() float64 {
+	return float64(time.Now().UnixNano()) / 1e9
+}
+
+func todayMidnightUTC() int64 {
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
+}
+
+func parseDate(s string) *time.Time {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func parseArgs(args []string) map[string]string {
+	result := make(map[string]string)
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "--") {
+			key := strings.TrimPrefix(args[i], "--")
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				result[key] = args[i+1]
+				i++
+			} else {
+				result[key] = "true"
+			}
+		}
+	}
+	return result
+}
+
+func fatal(op string, err error) {
+	fmt.Fprintf(os.Stderr, "%s: %v\n", op, err)
+	os.Exit(1)
+}
+
+func fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
+}
+
+func requireArgs(args []string, min int, usage string) {
+	if len(args) < min {
+		fatalf("Usage: %s", usage)
+	}
+}
+
+func requireEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		fatalf("%s is required", key)
+	}
+	return v
+}
+
+func outputJSON(v any) {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(v)
+}
+
+// ---------------------------------------------------------------------------
+// Payload builders
+// ---------------------------------------------------------------------------
+
+func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayload {
+	now := nowTs()
+
+	// Defaults
+	var st int
+	var sr *int64
+	var tir *int64
+	var dd *int64
+	tp := 0
+	pr := []string{}
+	agr := []string{}
+	ar := []string{}
+	tg := []string{}
+	nt := emptyNote()
+
+	// --type
+	if v, ok := opts["type"]; ok {
+		switch v {
+		case "project":
+			tp = 1
+		case "heading":
+			tp = 2
+		}
 	}
 
-	username := os.Getenv("THINGS_USERNAME")
-	password := os.Getenv("THINGS_PASSWORD")
-	if username == "" || password == "" {
-		fmt.Fprintln(os.Stderr, "THINGS_USERNAME and THINGS_PASSWORD required")
-		os.Exit(1)
+	// --when (schedule mapping per HAR)
+	if v, ok := opts["when"]; ok {
+		switch v {
+		case "today":
+			st = 1
+			today := todayMidnightUTC()
+			sr = &today
+			tir = &today
+		case "anytime":
+			st = 1
+		case "someday":
+			st = 2
+		case "inbox":
+			st = 0
+		}
 	}
+
+	// --note
+	if v, ok := opts["note"]; ok && v != "" {
+		nt = textNote(v)
+	}
+
+	// --deadline
+	if v, ok := opts["deadline"]; ok {
+		if t := parseDate(v); t != nil {
+			ts := t.Unix()
+			dd = &ts
+		}
+	}
+
+	// --scheduled (overrides sr/tir; sets st=1 with dates if not already set by --when)
+	if v, ok := opts["scheduled"]; ok {
+		if t := parseDate(v); t != nil {
+			ts := t.Unix()
+			sr = &ts
+			tir = &ts
+			if _, hasWhen := opts["when"]; !hasWhen {
+				st = 1 // default to anytime+date
+			}
+		}
+	}
+
+	// --project
+	if v, ok := opts["project"]; ok && v != "" {
+		pr = []string{v}
+	}
+
+	// --heading
+	if v, ok := opts["heading"]; ok && v != "" {
+		agr = []string{v}
+	}
+
+	// --area
+	if v, ok := opts["area"]; ok && v != "" {
+		ar = []string{v}
+	}
+
+	// --tags (comma-separated)
+	if v, ok := opts["tags"]; ok && v != "" {
+		tg = strings.Split(v, ",")
+	}
+
+	// --uuid handled by caller
+
+	return TaskCreatePayload{
+		Tp:   tp,
+		Sr:   sr,
+		Dds:  nil,
+		Rt:   []string{},
+		Rmd:  nil,
+		Ss:   0,
+		Tr:   false,
+		Dl:   []string{},
+		Icp:  false,
+		St:   st,
+		Ar:   ar,
+		Tt:   title,
+		Do:   0,
+		Lai:  nil,
+		Tir:  tir,
+		Tg:   tg,
+		Agr:  agr,
+		Ix:   0,
+		Cd:   now,
+		Lt:   false,
+		Icc:  0,
+		Md:   nil, // null for new creates
+		Ti:   0,
+		Dd:   dd,
+		Ato:  nil,
+		Nt:   nt,
+		Icsd: nil,
+		Pr:   pr,
+		Rp:   nil,
+		Acrd: nil,
+		Sp:   nil,
+		Sb:   0,
+		Rr:   nil,
+		Xx:   defaultExtension(),
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Fluent update builder — for sparse updates (edit, complete, trash, etc.)
+// ---------------------------------------------------------------------------
+
+type taskUpdate struct {
+	fields map[string]any
+}
+
+func newTaskUpdate() *taskUpdate {
+	return &taskUpdate{fields: map[string]any{
+		"md": nowTs(),
+	}}
+}
+
+func (u *taskUpdate) Title(s string) *taskUpdate {
+	u.fields["tt"] = s
+	return u
+}
+
+func (u *taskUpdate) Note(text string) *taskUpdate {
+	u.fields["nt"] = textNote(text)
+	return u
+}
+
+func (u *taskUpdate) ClearNote() *taskUpdate {
+	u.fields["nt"] = emptyNote()
+	return u
+}
+
+func (u *taskUpdate) Status(ss int) *taskUpdate {
+	u.fields["ss"] = ss
+	return u
+}
+
+func (u *taskUpdate) StopDate(ts float64) *taskUpdate {
+	u.fields["sp"] = ts
+	return u
+}
+
+func (u *taskUpdate) Trash(b bool) *taskUpdate {
+	u.fields["tr"] = b
+	return u
+}
+
+func (u *taskUpdate) Schedule(st int, sr, tir any) *taskUpdate {
+	u.fields["st"] = st
+	u.fields["sr"] = sr
+	u.fields["tir"] = tir
+	return u
+}
+
+func (u *taskUpdate) Deadline(dd int64) *taskUpdate {
+	u.fields["dd"] = dd
+	return u
+}
+
+func (u *taskUpdate) Scheduled(sr, tir int64) *taskUpdate {
+	u.fields["sr"] = sr
+	u.fields["tir"] = tir
+	return u
+}
+
+func (u *taskUpdate) build() map[string]any {
+	return u.fields
+}
+
+// ---------------------------------------------------------------------------
+// cliContext and state loading
+// ---------------------------------------------------------------------------
+
+type cliContext struct {
+	client  *thingscloud.Client
+	history *thingscloud.History
+}
+
+func initCLI() *cliContext {
+	username := requireEnv("THINGS_USERNAME")
+	password := requireEnv("THINGS_PASSWORD")
 
 	c := thingscloud.New(thingscloud.APIEndpoint, username, password)
-	c.Debug = true // Enable request/response logging
+
 	if _, err := c.Verify(); err != nil {
-		fmt.Fprintf(os.Stderr, "Login failed: %v\n", err)
-		os.Exit(1)
+		fatal("login", err)
 	}
 
 	history, err := c.OwnHistory()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to get history: %v\n", err)
-		os.Exit(1)
+		fatal("get history", err)
 	}
-	history.Sync()
+	if err := history.Sync(); err != nil {
+		fatal("sync history", err)
+	}
 
-	// Fetch all items
+	return &cliContext{client: c, history: history}
+}
+
+func (ctx *cliContext) loadState() *memory.State {
 	var allItems []thingscloud.Item
 	startIndex := 0
 	for {
-		items, hasMore, err := history.Items(thingscloud.ItemsOptions{StartIndex: startIndex})
+		items, hasMore, err := ctx.history.Items(thingscloud.ItemsOptions{StartIndex: startIndex})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to fetch items: %v\n", err)
-			os.Exit(1)
+			fatal("fetch items", err)
 		}
 		allItems = append(allItems, items...)
 		if !hasMore {
 			break
 		}
-		startIndex = history.LoadedServerIndex
+		startIndex = ctx.history.LoadedServerIndex
 	}
 
 	state := memory.NewState()
 	state.Update(allItems...)
-
-	cmd := os.Args[1]
-	switch cmd {
-	case "list":
-		listTasks(state, false, false, "")
-	case "today":
-		listTasks(state, true, false, "")
-	case "inbox":
-		listTasks(state, false, true, "")
-	case "area":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli area <name>")
-			os.Exit(1)
-		}
-		listTasksByArea(state, os.Args[2])
-	case "project":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli project <name>")
-			os.Exit(1)
-		}
-		listTasksByProject(state, os.Args[2])
-	case "show":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli show <uuid>")
-			os.Exit(1)
-		}
-		showTask(state, os.Args[2])
-	case "areas":
-		listAreas(state)
-	case "projects":
-		listProjects(state)
-	case "create":
-		// things-cli create "Task title" [--note "note"] [--when today|someday|anytime|inbox] [--deadline 2026-02-15] [--scheduled 2026-02-12]
-		createTaskFull(history, os.Args[2:])
-	case "edit":
-		// things-cli edit <uuid> [--title "new title"] [--note "new note"] [--when today|someday|anytime]
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli edit <uuid> [--title ...] [--note ...] [--when ...]")
-			os.Exit(1)
-		}
-		editTask(history, os.Args[2], os.Args[3:])
-	case "complete":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli complete <uuid>")
-			os.Exit(1)
-		}
-		completeTask(history, os.Args[2])
-	case "delete":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli delete <uuid>")
-			os.Exit(1)
-		}
-		deleteTask(history, os.Args[2])
-	case "fix-note":
-		// Fix malformed note by pushing proper format
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli fix-note <uuid> [note text]")
-			os.Exit(1)
-		}
-		noteText := ""
-		if len(os.Args) > 3 {
-			noteText = os.Args[3]
-		}
-		fixNote(history, os.Args[2], noteText)
-	case "purge":
-		// Push tombstone deletion
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: things-cli purge <uuid>")
-			os.Exit(1)
-		}
-		purgeTask(history, os.Args[2])
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		os.Exit(1)
-	}
+	return state
 }
 
-func listTasks(state *memory.State, todayOnly, inboxOnly bool, areaFilter string) {
-	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+// ---------------------------------------------------------------------------
+// Read commands
+// ---------------------------------------------------------------------------
 
-	var tasks []TaskOutput
-	for _, task := range state.Tasks {
-		if task.InTrash || task.Status == 3 || task.Type == thingscloud.TaskTypeProject {
-			continue
-		}
-		// Today = started (st=1) with sr/tir = today's date
-		if todayOnly {
-			if task.Schedule != thingscloud.TaskScheduleAnytime || task.ScheduledDate == nil || !task.ScheduledDate.Equal(todayStart) {
-				continue
-			}
-		}
-		// Inbox = st=0
-		if inboxOnly && task.Schedule != thingscloud.TaskScheduleInbox {
-			continue
-		}
-		tasks = append(tasks, taskToOutput(task))
-	}
-	outputJSON(tasks)
-}
-
-func listTasksByArea(state *memory.State, areaName string) {
-	// Find area UUID
-	var areaUUID string
-	for _, area := range state.Areas {
-		if strings.EqualFold(area.Title, areaName) {
-			areaUUID = area.UUID
-			break
-		}
-	}
-	if areaUUID == "" {
-		fmt.Fprintf(os.Stderr, "Area not found: %s\n", areaName)
-		os.Exit(1)
-	}
-
-	var tasks []TaskOutput
-	for _, task := range state.Tasks {
-		if task.InTrash || task.Status == 3 {
-			continue
-		}
-		for _, id := range task.AreaIDs {
-			if id == areaUUID {
-				tasks = append(tasks, taskToOutput(task))
-				break
-			}
-		}
-	}
-	outputJSON(tasks)
-}
-
-func listTasksByProject(state *memory.State, projectName string) {
-	// Find project UUID
-	var projectUUID string
-	for _, task := range state.Tasks {
-		if task.Type == thingscloud.TaskTypeProject && strings.EqualFold(task.Title, projectName) {
-			projectUUID = task.UUID
-			break
-		}
-	}
-	if projectUUID == "" {
-		fmt.Fprintf(os.Stderr, "Project not found: %s\n", projectName)
-		os.Exit(1)
-	}
-
-	var tasks []TaskOutput
-	for _, task := range state.Tasks {
-		if task.InTrash || task.Status == 3 || task.Type == thingscloud.TaskTypeProject {
-			continue
-		}
-		for _, id := range task.ActionGroupIDs {
-			if id == projectUUID {
-				tasks = append(tasks, taskToOutput(task))
-				break
-			}
-		}
-	}
-	outputJSON(tasks)
-}
-
-func showTask(state *memory.State, uuid string) {
-	for _, task := range state.Tasks {
-		if strings.HasPrefix(task.UUID, uuid) {
-			outputJSON(taskToOutput(task))
-			return
-		}
-	}
-	fmt.Fprintf(os.Stderr, "Task not found: %s\n", uuid)
-	os.Exit(1)
-}
-
-func listAreas(state *memory.State) {
-	type AreaOutput struct {
-		UUID  string `json:"uuid"`
-		Title string `json:"title"`
-	}
-	var areas []AreaOutput
-	for _, area := range state.Areas {
-		areas = append(areas, AreaOutput{UUID: area.UUID, Title: area.Title})
-	}
-	outputJSON(areas)
-}
-
-func listProjects(state *memory.State) {
-	var projects []TaskOutput
-	for _, task := range state.Tasks {
-		if task.Type == thingscloud.TaskTypeProject && !task.InTrash && task.Status != 3 {
-			projects = append(projects, taskToOutput(task))
-		}
-	}
-	outputJSON(projects)
+// TaskOutput is a JSON-friendly task representation for CLI output.
+type TaskOutput struct {
+	UUID          string   `json:"uuid"`
+	Title         string   `json:"title"`
+	Note          string   `json:"note,omitempty"`
+	Status        int      `json:"status"`
+	InTrash       bool     `json:"inTrash"`
+	IsProject     bool     `json:"isProject"`
+	Schedule      int      `json:"schedule"`
+	ScheduledDate *string  `json:"scheduledDate,omitempty"`
+	DeadlineDate  *string  `json:"deadlineDate,omitempty"`
+	AreaIDs       []string `json:"areaIds,omitempty"`
+	ParentIDs     []string `json:"parentIds,omitempty"`
 }
 
 func taskToOutput(t *thingscloud.Task) TaskOutput {
@@ -374,520 +496,365 @@ func taskToOutput(t *thingscloud.Task) TaskOutput {
 	return out
 }
 
-func outputJSON(v interface{}) {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.Encode(v)
-}
+func cmdList(state *memory.State, args []string) {
+	opts := parseArgs(args)
+	todayStart := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.UTC)
 
-func parseArgs(args []string) map[string]string {
-	result := make(map[string]string)
-	for i := 0; i < len(args); i++ {
-		if strings.HasPrefix(args[i], "--") {
-			key := strings.TrimPrefix(args[i], "--")
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
-				result[key] = args[i+1]
-				i++
-			} else {
-				result[key] = "true"
+	var tasks []TaskOutput
+	for _, task := range state.Tasks {
+		if task.InTrash || task.Status == 3 || task.Type == thingscloud.TaskTypeProject {
+			continue
+		}
+
+		// Filters
+		if _, ok := opts["today"]; ok {
+			if task.Schedule != thingscloud.TaskScheduleAnytime || task.ScheduledDate == nil || !task.ScheduledDate.Equal(todayStart) {
+				continue
 			}
 		}
+		if _, ok := opts["inbox"]; ok {
+			if task.Schedule != thingscloud.TaskScheduleInbox {
+				continue
+			}
+		}
+		if areaName, ok := opts["area"]; ok {
+			areaUUID := findAreaUUID(state, areaName)
+			if !containsStr(task.AreaIDs, areaUUID) {
+				continue
+			}
+		}
+		if projectName, ok := opts["project"]; ok {
+			projectUUID := findProjectUUID(state, projectName)
+			if !containsStr(task.ActionGroupIDs, projectUUID) {
+				continue
+			}
+		}
+
+		tasks = append(tasks, taskToOutput(task))
 	}
-	return result
+	outputJSON(tasks)
 }
 
-func parseDate(s string) *time.Time {
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return nil
+func cmdShow(state *memory.State, uuid string) {
+	for _, task := range state.Tasks {
+		if strings.HasPrefix(task.UUID, uuid) {
+			outputJSON(taskToOutput(task))
+			return
+		}
 	}
-	return &t
+	fatalf("task not found: %s", uuid)
 }
 
-func toUnixPtr(t *time.Time) *int64 {
-	if t == nil {
-		return nil
+func cmdAreas(state *memory.State) {
+	type AreaOutput struct {
+		UUID  string `json:"uuid"`
+		Title string `json:"title"`
 	}
-	ts := t.Unix()
-	return &ts
+	var areas []AreaOutput
+	for _, area := range state.Areas {
+		areas = append(areas, AreaOutput{UUID: area.UUID, Title: area.Title})
+	}
+	outputJSON(areas)
 }
 
-// Generate Things-style short UUID (22 chars, base62-ish)
-func generateThingsUUID() string {
-	// Things uses a custom base62-like encoding
-	// For simplicity, we'll use a UUID and take first 22 chars
-	u := uuid.New()
-	// Convert to base62-like string
-	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	result := make([]byte, 22)
-	bytes := u[:]
-	for i := 0; i < 22; i++ {
-		result[i] = chars[int(bytes[i%16])%len(chars)]
+func cmdProjects(state *memory.State) {
+	var projects []TaskOutput
+	for _, task := range state.Tasks {
+		if task.Type == thingscloud.TaskTypeProject && !task.InTrash && task.Status != 3 {
+			projects = append(projects, taskToOutput(task))
+		}
 	}
-	return string(result)
+	outputJSON(projects)
 }
 
-func makeEmptyNote() ThingsNote {
-	return ThingsNote{
-		Typ: "tx",
-		Ch:  0,
-		V:   "",
-		T:   1,
+func cmdTags(state *memory.State) {
+	type TagOutput struct {
+		UUID      string   `json:"uuid"`
+		Title     string   `json:"title"`
+		Shorthand string   `json:"shorthand,omitempty"`
+		ParentIDs []string `json:"parentIds,omitempty"`
 	}
+	var tags []TagOutput
+	for _, tag := range state.Tags {
+		tags = append(tags, TagOutput{
+			UUID:      tag.UUID,
+			Title:     tag.Title,
+			Shorthand: tag.ShortHand,
+			ParentIDs: tag.ParentTagIDs,
+		})
+	}
+	outputJSON(tags)
 }
 
-func makeNoteWithText(text string) ThingsNote {
-	// Things uses t:1 with text directly in v, checksum of the text
-	var ch int64 = 0
-	for _, c := range text {
-		ch = (ch*31 + int64(c)) & 0xFFFFFFFF
+// helpers for cmdList filters
+func findAreaUUID(state *memory.State, name string) string {
+	for _, area := range state.Areas {
+		if strings.EqualFold(area.Title, name) {
+			return area.UUID
+		}
 	}
-	return ThingsNote{
-		Typ: "tx",
-		Ch:  ch,
-		V:   text,
-		T:   1,
-	}
+	fatalf("area not found: %s", name)
+	return ""
 }
 
-func makeExtension() ThingsExtension {
-	return ThingsExtension{
-		Sn:  make(map[string]interface{}),
-		Typ: "oo",
+func findProjectUUID(state *memory.State, name string) string {
+	for _, task := range state.Tasks {
+		if task.Type == thingscloud.TaskTypeProject && strings.EqualFold(task.Title, name) {
+			return task.UUID
+		}
 	}
+	fatalf("project not found: %s", name)
+	return ""
 }
 
-func createTaskFull(history *thingscloud.History, args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: things-cli create \"Title\" [options]")
-		fmt.Fprintln(os.Stderr, "Options:")
-		fmt.Fprintln(os.Stderr, "  --type task|project|heading    Type of item (default: task)")
-		fmt.Fprintln(os.Stderr, "  --note \"...\"                   Note/description")
-		fmt.Fprintln(os.Stderr, "  --when today|anytime|inbox     Schedule")
-		fmt.Fprintln(os.Stderr, "  --deadline YYYY-MM-DD          Deadline date")
-		fmt.Fprintln(os.Stderr, "  --scheduled YYYY-MM-DD         Scheduled date")
-		fmt.Fprintln(os.Stderr, "  --project UUID                 Parent project UUID")
-		fmt.Fprintln(os.Stderr, "  --heading UUID                 Parent heading UUID")
-		fmt.Fprintln(os.Stderr, "  --area UUID                    Area UUID")
-		fmt.Fprintln(os.Stderr, "  --tags UUID,UUID,...           Comma-separated tag UUIDs")
-		fmt.Fprintln(os.Stderr, "  --uuid UUID                    Specify UUID (for overwrites)")
-		os.Exit(1)
+func containsStr(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
 	}
+	return false
+}
+
+// ---------------------------------------------------------------------------
+// Write commands
+// ---------------------------------------------------------------------------
+
+func cmdCreate(history *thingscloud.History, args []string) {
+	requireArgs(args, 1, "things-cli create \"Title\" [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] [--project UUID] [--heading UUID] [--area UUID] [--tags UUID,...] [--type task|project|heading] [--uuid UUID]")
 
 	title := args[0]
 	opts := parseArgs(args[1:])
 
-	now := time.Now()
-	nowTs := float64(now.UnixNano()) / 1e9
-	
-	// Allow specifying UUID for overwrite operations
-	var taskUUID string
-	if customUUID, ok := opts["uuid"]; ok && customUUID != "" {
-		taskUUID = customUUID
-	} else {
-		taskUUID = generateThingsUUID()
+	taskUUID := opts["uuid"]
+	if taskUUID == "" {
+		taskUUID = generateUUID()
 	}
 
-	// Determine item type (tp): 0=task, 1=project, 2=heading
-	var tp int = 0
-	if itemType, ok := opts["type"]; ok {
-		switch itemType {
-		case "project":
-			tp = 1
-		case "heading":
-			tp = 2
-		case "task":
-			tp = 0
-		}
+	payload := newTaskCreatePayload(title, opts)
+	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
+
+	if err := history.Write(env); err != nil {
+		fatal("create task", err)
 	}
 
-	// Determine schedule (st field)
-	// Per HAR capture analysis:
-	//   st=0: Inbox (sr=null, tir=null)
-	//   st=1: Anytime/Today — Today when sr/tir = today's date, Anytime when null
-	//   st=2: Someday/Upcoming — Upcoming when sr/tir = future date, Someday when null
-	var st int = 0 // Inbox by default
-	var sr *int64 = nil
-	var tir *int64 = nil
-
-	if when, ok := opts["when"]; ok {
-		switch when {
-		case "today":
-			st = 1 // "started" — with today's date makes it appear in Today
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-			todayTs := today.Unix()
-			sr = &todayTs
-			tir = &todayTs
-		case "anytime":
-			st = 1 // "started" — without dates appears in Anytime
-			// sr/tir stay null
-		case "someday":
-			st = 2 // deferred — without dates appears in Someday
-			// sr/tir stay null
-		case "inbox":
-			st = 0 // unprocessed
-			// sr/tir stay null
-		}
-	}
-
-	// Build note
-	var note ThingsNote
-	if noteText, ok := opts["note"]; ok && noteText != "" {
-		note = makeNoteWithText(noteText)
-	} else {
-		note = makeEmptyNote()
-	}
-
-	// Handle deadline
-	var dd *int64 = nil
-	if deadline, ok := opts["deadline"]; ok {
-		if t := parseDate(deadline); t != nil {
-			dd = toUnixPtr(t)
-		}
-	}
-
-	// Handle scheduled date
-	if scheduled, ok := opts["scheduled"]; ok {
-		if t := parseDate(scheduled); t != nil {
-			ts := t.Unix()
-			sr = &ts
-			tir = &ts
-			if st < 2 {
-				st = 2 // Move to Today/Scheduled if date set
-			}
-		}
-	}
-
-	// Handle parent project - MUST be empty array, not null
-	pr := []string{}
-	if projectUUID, ok := opts["project"]; ok && projectUUID != "" {
-		pr = []string{projectUUID}
-	}
-
-	// Handle parent heading (after-group-reference) - MUST be empty array, not null
-	agr := []string{}
-	if headingUUID, ok := opts["heading"]; ok && headingUUID != "" {
-		agr = []string{headingUUID}
-	}
-
-	// Handle area - MUST be empty array, not null
-	ar := []string{}
-	if areaUUID, ok := opts["area"]; ok && areaUUID != "" {
-		ar = []string{areaUUID}
-	}
-
-	// Handle tags - MUST be empty array, not null
-	tg := []string{}
-	if tagsStr, ok := opts["tags"]; ok && tagsStr != "" {
-		tg = strings.Split(tagsStr, ",")
-	}
-
-	// Build full payload matching Things format EXACTLY from Proxyman capture
-	// Key: sr/tir null for inbox, md null for new creates, arrays always []
-	payload := FullTaskPayload{
-		Tp:   tp,
-		Sr:   sr,    // null for inbox/anytime
-		Dds:  nil,
-		Rt:   []string{},
-		Rmd:  nil,
-		Ss:   0,
-		Tr:   false,
-		Dl:   []string{},
-		Icp:  false,
-		St:   st,
-		Ar:   ar,
-		Tt:   title,
-		Do:   0,
-		Lai:  nil,
-		Tir:  tir,   // null for inbox/anytime
-		Tg:   tg,
-		Agr:  agr,
-		Ix:   0,     // Things uses 0 or negative, 0 is safe
-		Cd:   nowTs, // fractional unix timestamp
-		Lt:   false,
-		Icc:  0,
-		Md:   nil,   // NULL for new creates! Things sets this on first edit
-		Ti:   0,
-		Dd:   dd,
-		Ato:  nil,
-		Nt:   note,
-		Icsd: nil,
-		Pr:   pr,
-		Rp:   nil,
-		Acrd: nil,
-		Sp:   nil,
-		Sb:   0,
-		Rr:   nil,
-		Xx:   makeExtension(),
-	}
-
-	item := FullTaskItem{
-		T: 0, // Create
-		E: "Task6",
-		P: payload,
-	}
-
-	// Debug: print what we're about to send
-	debugPayload := map[string]interface{}{taskUUID: item}
-	debugBytes, _ := json.MarshalIndent(debugPayload, "", "  ")
-	fmt.Fprintf(os.Stderr, "DEBUG payload:\n%s\n", string(debugBytes))
-
-	// Write using proper envelope format
-	writeItem := directWriteItem{uuid: taskUUID, item: item}
-	if err := history.Write(writeItem); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create task: %v\n", err)
-		os.Exit(1)
-	}
-
-	outputJSON(map[string]string{
-		"status": "created",
-		"uuid":   taskUUID,
-		"title":  title,
-	})
+	outputJSON(map[string]string{"status": "created", "uuid": taskUUID, "title": title})
 }
 
-// directWriteItem wraps a FullTaskItem for the SDK's Write method
-// The SDK calls MarshalJSON on each item and puts it in map[uuid]item
-// So we need MarshalJSON to return the {t, e, p} structure
-type directWriteItem struct {
-	uuid string
-	item FullTaskItem
-}
-
-func (d directWriteItem) UUID() string {
-	return d.uuid
-}
-
-func (d directWriteItem) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.item)
-}
-
-// directWriteUpdate wraps an update payload (only changed fields)
-type directWriteUpdate struct {
-	uuid    string
-	payload map[string]interface{}
-}
-
-func (d directWriteUpdate) UUID() string {
-	return d.uuid
-}
-
-func (d directWriteUpdate) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.payload)
-}
-
-func editTask(history *thingscloud.History, taskUUID string, args []string) {
+func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 	opts := parseArgs(args)
-
 	if len(opts) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: things-cli edit <uuid> [--title \"...\"] [--note \"...\"] [--when today|someday|anytime] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD]")
-		os.Exit(1)
+		fatalf("Usage: things-cli edit <uuid> [--title ...] [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD]")
 	}
 
-	now := time.Now()
-	nowTs := float64(now.UnixNano()) / 1e9
+	u := newTaskUpdate()
 
-	// Build payload with only changed fields (Things update format)
-	p := map[string]interface{}{
-		"md": nowTs, // modification date always required
+	if v, ok := opts["title"]; ok {
+		u.Title(v)
 	}
-
-	if title, ok := opts["title"]; ok {
-		p["tt"] = title
-	}
-
-	if note, ok := opts["note"]; ok {
-		if note == "" {
-			p["nt"] = map[string]interface{}{"t": 1, "ch": 0, "v": "", "_t": "tx"}
+	if v, ok := opts["note"]; ok {
+		if v == "" {
+			u.ClearNote()
 		} else {
-			// Simple note with checksum
-			var ch int64 = 0
-			for _, c := range note {
-				ch = (ch*31 + int64(c)) & 0xFFFFFFFF
-			}
-			p["nt"] = map[string]interface{}{"t": 1, "ch": ch, "v": note, "_t": "tx"}
+			u.Note(v)
 		}
 	}
-
-	if when, ok := opts["when"]; ok {
-		switch when {
+	if v, ok := opts["when"]; ok {
+		switch v {
 		case "today":
-			p["st"] = 1 // started — with today's date = Today view
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-			todayTs := today.Unix()
-			p["sr"] = todayTs
-			p["tir"] = todayTs
+			today := todayMidnightUTC()
+			u.Schedule(1, today, today)
 		case "anytime":
-			p["st"] = 1 // started — without dates = Anytime view
-			p["sr"] = nil
-			p["tir"] = nil
+			u.Schedule(1, nil, nil)
 		case "someday":
-			p["st"] = 2 // deferred — Someday view
-			p["sr"] = nil
-			p["tir"] = nil
+			u.Schedule(2, nil, nil)
 		case "inbox":
-			p["st"] = 0 // unprocessed — Inbox view
-			p["sr"] = nil
-			p["tir"] = nil
+			u.Schedule(0, nil, nil)
 		}
 	}
-
-	if deadline, ok := opts["deadline"]; ok {
-		if t := parseDate(deadline); t != nil {
-			p["dd"] = t.Unix()
+	if v, ok := opts["deadline"]; ok {
+		if t := parseDate(v); t != nil {
+			u.Deadline(t.Unix())
 		}
 	}
-
-	if scheduled, ok := opts["scheduled"]; ok {
-		if t := parseDate(scheduled); t != nil {
-			p["sr"] = t.Unix()
-			p["tir"] = t.Unix()
+	if v, ok := opts["scheduled"]; ok {
+		if t := parseDate(v); t != nil {
+			ts := t.Unix()
+			u.Scheduled(ts, ts)
 			if _, hasWhen := opts["when"]; !hasWhen {
-				p["st"] = 2 // Move to scheduled if not explicitly set
+				u.Schedule(1, ts, ts)
 			}
 		}
 	}
 
-	// Build update envelope: {t: 1, e: "Task6", p: {...}}
-	envelope := map[string]interface{}{
-		"t": 1,
-		"e": "Task6",
-		"p": p,
+	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		fatal("edit task", err)
 	}
 
-	writeItem := directWriteUpdate{uuid: taskUUID, payload: envelope}
-	if err := history.Write(writeItem); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to edit task: %v\n", err)
-		os.Exit(1)
-	}
-
-	outputJSON(map[string]string{
-		"status": "updated",
-		"uuid":   taskUUID,
-	})
+	outputJSON(map[string]string{"status": "updated", "uuid": taskUUID})
 }
 
-func completeTask(history *thingscloud.History, taskUUID string) {
-	now := time.Now()
-	nowTs := float64(now.UnixNano()) / 1e9
+func cmdComplete(history *thingscloud.History, taskUUID string) {
+	ts := nowTs()
+	u := newTaskUpdate().Status(3).StopDate(ts)
 
-	// Complete: ss=3 (completed), sp=completion timestamp
-	p := map[string]interface{}{
-		"md": nowTs,
-		"ss": 3,     // status = completed
-		"sp": nowTs, // stop/completion date
+	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		fatal("complete task", err)
 	}
 
-	envelope := map[string]interface{}{
-		"t": 1,
-		"e": "Task6",
-		"p": p,
-	}
-
-	writeItem := directWriteUpdate{uuid: taskUUID, payload: envelope}
-	if err := history.Write(writeItem); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to complete task: %v\n", err)
-		os.Exit(1)
-	}
-
-	outputJSON(map[string]string{
-		"status": "completed",
-		"uuid":   taskUUID,
-	})
+	outputJSON(map[string]string{"status": "completed", "uuid": taskUUID})
 }
 
-func deleteTask(history *thingscloud.History, taskUUID string) {
-	now := time.Now()
-	nowTs := float64(now.UnixNano()) / 1e9
+func cmdTrash(history *thingscloud.History, taskUUID string) {
+	u := newTaskUpdate().Trash(true)
 
-	// Move to trash: tr=true
-	p := map[string]interface{}{
-		"md": nowTs,
-		"tr": true,
+	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		fatal("trash task", err)
 	}
 
-	envelope := map[string]interface{}{
-		"t": 1,
-		"e": "Task6",
-		"p": p,
-	}
-
-	writeItem := directWriteUpdate{uuid: taskUUID, payload: envelope}
-	if err := history.Write(writeItem); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to delete task: %v\n", err)
-		os.Exit(1)
-	}
-
-	outputJSON(map[string]string{
-		"status": "trashed",
-		"uuid":   taskUUID,
-	})
+	outputJSON(map[string]string{"status": "trashed", "uuid": taskUUID})
 }
 
-func purgeTask(history *thingscloud.History, taskUUID string) {
-	now := time.Now()
-	nowTs := float64(now.UnixNano()) / 1e9
-
-	// Create a Tombstone2 entry to permanently delete
-	// Things uses: {"t":0,"e":"Tombstone2","p":{"dloid":"UUID","dld":timestamp}}
-	tombstoneUUID := generateThingsUUID()
-	
-	envelope := map[string]interface{}{
-		"t": 0, // Create (we're creating a tombstone)
-		"e": "Tombstone2",
-		"p": map[string]interface{}{
-			"dloid": taskUUID, // deleted object ID
-			"dld":   nowTs,    // deletion date
-		},
+func cmdPurge(history *thingscloud.History, taskUUID string) {
+	tombstoneUUID := generateUUID()
+	payload := map[string]any{
+		"dloid": taskUUID,
+		"dld":   nowTs(),
 	}
 
-	writeItem := directWriteUpdate{uuid: tombstoneUUID, payload: envelope}
-	if err := history.Write(writeItem); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to purge task: %v\n", err)
-		os.Exit(1)
+	env := writeEnvelope{id: tombstoneUUID, action: 0, kind: "Tombstone2", payload: payload}
+	if err := history.Write(env); err != nil {
+		fatal("purge task", err)
 	}
 
-	outputJSON(map[string]string{
-		"status": "purged",
-		"uuid":   taskUUID,
-	})
+	outputJSON(map[string]string{"status": "purged", "uuid": taskUUID})
 }
 
-func fixNote(history *thingscloud.History, taskUUID string, noteText string) {
-	now := time.Now()
-	nowTs := float64(now.UnixNano()) / 1e9
+func cmdMoveToToday(history *thingscloud.History, taskUUID string) {
+	today := todayMidnightUTC()
+	u := newTaskUpdate().Schedule(1, today, today)
 
-	// Build note object
-	var noteObj map[string]interface{}
-	if noteText == "" {
-		noteObj = map[string]interface{}{"t": 1, "ch": 0, "v": "", "_t": "tx"}
-	} else {
-		var ch int64 = 0
-		for _, c := range noteText {
-			ch = (ch*31 + int64(c)) & 0xFFFFFFFF
-		}
-		noteObj = map[string]interface{}{"t": 1, "ch": ch, "v": noteText, "_t": "tx"}
+	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		fatal("move to today", err)
 	}
 
-	p := map[string]interface{}{
-		"md": nowTs,
-		"nt": noteObj,
+	outputJSON(map[string]string{"status": "moved-to-today", "uuid": taskUUID})
+}
+
+func cmdCreateTag(history *thingscloud.History, args []string) {
+	requireArgs(args, 1, `things-cli create-tag "Name" [--shorthand KEY] [--parent UUID]`)
+
+	title := args[0]
+	opts := parseArgs(args[1:])
+
+	tagUUID := opts["uuid"]
+	if tagUUID == "" {
+		tagUUID = generateUUID()
 	}
 
-	envelope := map[string]interface{}{
-		"t": 1,
-		"e": "Task6",
-		"p": p,
+	// Per HAR: ix is negative, sh is null on create, pn is []
+	var sh *string
+	if v, ok := opts["shorthand"]; ok {
+		sh = &v
 	}
 
-	writeItem := directWriteUpdate{uuid: taskUUID, payload: envelope}
-	if err := history.Write(writeItem); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to fix note: %v\n", err)
+	pn := []string{}
+	if v, ok := opts["parent"]; ok && v != "" {
+		pn = []string{v}
+	}
+
+	payload := TagCreatePayload{
+		Tt: title,
+		Ix: -1237, // Things uses negative indices
+		Sh: sh,
+		Pn: pn,
+		Xx: defaultExtension(),
+	}
+
+	env := writeEnvelope{id: tagUUID, action: 0, kind: "Tag4", payload: payload}
+	if err := history.Write(env); err != nil {
+		fatal("create tag", err)
+	}
+
+	outputJSON(map[string]string{"status": "created", "uuid": tagUUID, "title": title})
+}
+
+// ---------------------------------------------------------------------------
+// main() dispatch and usage
+// ---------------------------------------------------------------------------
+
+func printUsage() {
+	fmt.Fprintln(os.Stderr, `Usage: things-cli <command> [args]
+
+Read commands (load state from cloud):
+  list [--today] [--inbox] [--area NAME] [--project NAME]
+  show <uuid>
+  areas
+  projects
+  tags
+
+Write commands (fast — skip state loading):
+  create "Title" [--note ...] [--when today|anytime|someday|inbox]
+         [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD]
+         [--project UUID] [--heading UUID] [--area UUID]
+         [--tags UUID,...] [--type task|project|heading] [--uuid UUID]
+  create-tag "Name" [--shorthand KEY] [--parent UUID]
+  edit <uuid> [--title ...] [--note ...] [--when ...] [--deadline ...] [--scheduled ...]
+  complete <uuid>
+  trash <uuid>
+  purge <uuid>
+  move-to-today <uuid>`)
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		printUsage()
 		os.Exit(1)
 	}
 
-	outputJSON(map[string]string{
-		"status": "fixed",
-		"uuid":   taskUUID,
-	})
+	ctx := initCLI()
+	cmd := os.Args[1]
+
+	switch cmd {
+	// Read commands — need state
+	case "list":
+		cmdList(ctx.loadState(), os.Args[2:])
+	case "show":
+		requireArgs(os.Args[2:], 1, "things-cli show <uuid>")
+		cmdShow(ctx.loadState(), os.Args[2])
+	case "areas":
+		cmdAreas(ctx.loadState())
+	case "projects":
+		cmdProjects(ctx.loadState())
+	case "tags":
+		cmdTags(ctx.loadState())
+
+	// Write commands — skip state loading
+	case "create":
+		cmdCreate(ctx.history, os.Args[2:])
+	case "create-tag":
+		cmdCreateTag(ctx.history, os.Args[2:])
+	case "edit":
+		requireArgs(os.Args[2:], 1, "things-cli edit <uuid> [--title ...] [--note ...]")
+		cmdEdit(ctx.history, os.Args[2], os.Args[3:])
+	case "complete":
+		requireArgs(os.Args[2:], 1, "things-cli complete <uuid>")
+		cmdComplete(ctx.history, os.Args[2])
+	case "trash":
+		requireArgs(os.Args[2:], 1, "things-cli trash <uuid>")
+		cmdTrash(ctx.history, os.Args[2])
+	case "purge":
+		requireArgs(os.Args[2:], 1, "things-cli purge <uuid>")
+		cmdPurge(ctx.history, os.Args[2])
+	case "move-to-today":
+		requireArgs(os.Args[2:], 1, "things-cli move-to-today <uuid>")
+		cmdMoveToToday(ctx.history, os.Args[2])
+
+	default:
+		fatalf("unknown command: %s", cmd)
+	}
 }
