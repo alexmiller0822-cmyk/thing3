@@ -27,13 +27,27 @@ type Note struct {
 func ApplyPatches(original string, patches []NotePatch) string {
 	runes := []rune(original)
 	for _, p := range patches {
+		// Bounds check for position
+		if p.Position < 0 {
+			p.Position = 0
+		}
+		if p.Position > len(runes) {
+			p.Position = len(runes)
+		}
 		end := p.Position + p.Length
 		if end > len(runes) {
 			end = len(runes)
 		}
-		result := make([]rune, 0, len(runes)-p.Length+len([]rune(p.Replacement)))
+		// Calculate actual length being removed
+		actualLength := end - p.Position
+		replacementRunes := []rune(p.Replacement)
+		newCap := len(runes) - actualLength + len(replacementRunes)
+		if newCap < 0 {
+			newCap = len(replacementRunes)
+		}
+		result := make([]rune, 0, newCap)
 		result = append(result, runes[:p.Position]...)
-		result = append(result, []rune(p.Replacement)...)
+		result = append(result, replacementRunes...)
 		result = append(result, runes[end:]...)
 		runes = result
 	}
