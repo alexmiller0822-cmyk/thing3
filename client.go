@@ -1,6 +1,8 @@
 package thingscloud
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -19,12 +21,44 @@ var (
 	ErrUnauthorized = errors.New("unauthorized")
 )
 
+// ClientInfo represents the device metadata sent in the things-client-info header.
+type ClientInfo struct {
+	DeviceModel string `json:"dm"`
+	LocalRegion string `json:"lr"`
+	NF          bool   `json:"nf"`
+	NK          bool   `json:"nk"`
+	AppName     string `json:"nn"`
+	AppVersion  string `json:"nv"`
+	OSName      string `json:"on"`
+	OSVersion   string `json:"ov"`
+	PrimaryLang string `json:"pl"`
+	UserLocale  string `json:"ul"`
+}
+
+// DefaultClientInfo returns a ClientInfo with default values matching a typical Mac client.
+func DefaultClientInfo() ClientInfo {
+	return ClientInfo{
+		DeviceModel: "MacBookPro18,3",
+		LocalRegion: "US",
+		NF:          true,
+		NK:          true,
+		AppName:     "ThingsMac",
+		AppVersion:  "32209501",
+		OSName:      "macOS",
+		OSVersion:   "15.7.3",
+		PrimaryLang: "en-US",
+		UserLocale:  "en-Latn-US",
+	}
+}
+
 // Client is a culturedcode cloud client. It can be used to interact with the
 // things cloud to manage your data.
 type Client struct {
-	Endpoint string
-	EMail    string
-	password string
+	Endpoint   string
+	EMail      string
+	password   string
+	ClientInfo ClientInfo
+	Debug      bool
 
 	client *http.Client
 	common service
@@ -39,9 +73,10 @@ type service struct {
 // New initializes a things client
 func New(endpoint, email, password string) *Client {
 	c := &Client{
-		Endpoint: endpoint,
-		EMail:    email,
-		password: password,
+		Endpoint:   endpoint,
+		EMail:      email,
+		password:   password,
+		ClientInfo: DefaultClientInfo(),
 
 		client: &http.Client{},
 	}
@@ -51,7 +86,7 @@ func New(endpoint, email, password string) *Client {
 }
 
 // ThingsUserAgent is the http user-agent header set by things for mac Version 3.13.8 (31308504)
-const ThingsUserAgent = "ThingsMac/31516502"
+const ThingsUserAgent = "ThingsMac/32209501"
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if req.Host == "" {
@@ -70,14 +105,24 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Content-Encoding", "UTF8")
 	req.Header.Set("Accept-Language", "en-us")
 
-	bs, _ := httputil.DumpRequest(req, true)
-	log.Println("REQUEST:", string(bs))
+	ciJSON, err := json.Marshal(c.ClientInfo)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling client info: %w", err)
+	}
+	req.Header.Set("Things-Client-Info", base64.StdEncoding.EncodeToString(ciJSON))
+
+	if c.Debug {
+		bs, _ := httputil.DumpRequest(req, true)
+		log.Println("REQUEST:", string(bs))
+	}
 
 	resp, err := c.client.Do(req)
-	if err == nil {
-		bs, _ := httputil.DumpResponse(resp, true)
-		log.Println("RESPONSE:", string(bs))
+	if c.Debug {
+		if err == nil {
+			bs, _ := httputil.DumpResponse(resp, true)
+			log.Println("RESPONSE:", string(bs))
+		}
+		log.Println()
 	}
-	log.Println()
 	return resp, err
 }
