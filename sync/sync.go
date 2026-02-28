@@ -165,7 +165,7 @@ func (s *Syncer) Sync() ([]Change, error) {
 
 		// Use server's current-item-index as next start position
 		// (not len(items) - items get expanded from nested structure)
-		startIndex = s.history.LatestServerIndex
+		startIndex = s.history.LoadedServerIndex
 		hasMore = more
 	}
 
